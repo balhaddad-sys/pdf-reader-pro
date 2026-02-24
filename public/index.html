@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<title>PDF Reader Pro</title>
+<link rel="icon" type="image/png" sizes="96x96" href="./icons/icon-96.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="manifest" href="manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg-primary: #faf9f7;
+  --bg-secondary: #f0eeeb;
+  --bg-tertiary: #e8e5e0;
+  --bg-canvas: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a5e;
+  --text-tertiary: #8a8a9e;
+  --accent: #2d5be3;
+  --accent-soft: rgba(45,91,227,0.08);
+  --accent-hover: #1e4bcc;
+  --border: rgba(0,0,0,0.06);
+  --border-strong: rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-page: 0 2px 12px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.12);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --font-ui: 'DM Sans', -apple-system, sans-serif;
+  --font-reading: 'Source Serif 4', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --panel-width: 280px;
+  --topbar-height: 52px;
+  --statusbar-height: 32px;
+  --highlight-yellow: rgba(255,213,79,0.4);
+  --highlight-green: rgba(102,187,106,0.35);
+  --highlight-blue: rgba(66,165,245,0.35);
+  --highlight-pink: rgba(240,98,146,0.35);
+  --highlight-purple: rgba(171,130,255,0.35);
+  --transition-fast: 150ms cubic-bezier(0.4,0,0.2,1);
+  --transition-smooth: 300ms cubic-bezier(0.4,0,0.2,1);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #111118;
+  --bg-secondary: #1a1a24;
+  --bg-tertiary: #24243a;
+  --bg-canvas: #16161e;
+  --text-primary: #e8e8f0;
+  --text-secondary: #a0a0b8;
+  --text-tertiary: #606078;
+  --accent: #5b8af5;
+  --accent-soft: rgba(91,138,245,0.12);
+  --accent-hover: #7ba3ff;
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-page: 0 2px 16px rgba(0,0,0,0.4);
+}
+
+[data-theme="sepia"] {
+  --bg-primary: #f4ece1;
+  --bg-secondary: #ebe3d6;
+  --bg-tertiary: #ddd4c5;
+  --bg-canvas: #f9f1e6;
+  --text-primary: #3d3229;
+  --text-secondary: #6b5d52;
+  --text-tertiary: #9a8b7e;
+  --accent: #b5651d;
+  --accent-soft: rgba(181,101,29,0.1);
+  --accent-hover: #c7722a;
+  --border: rgba(61,50,41,0.08);
+  --border-strong: rgba(61,50,41,0.15);
+  --shadow-page: 0 2px 12px rgba(61,50,41,0.1);
+}
+
+html, body { 
+  height: 100%; 
+  overflow: hidden; 
+  font-family: var(--font-ui);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root { height: 100%; }
+
+::selection { background: var(--accent-soft); color: var(--accent); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; opacity: 0.5; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+input, button, textarea { font-family: inherit; }
+
+button { 
+  cursor: pointer; 
+  border: none; 
+  background: none; 
+  color: inherit;
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes slideRight { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
+@keyframes scaleIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
+
+.animate-fade { animation: fadeIn 0.3s ease; }
+.animate-slide-up { animation: slideUp 0.3s ease; }
+.animate-scale { animation: scaleIn 0.2s ease; }
+
+/* ===== APP SHELL ===== */
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ===== LIBRARY ===== */
+.library {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.library-header {
+  padding: 20px 24px 0;
+  flex-shrink: 0;
+}
+
+.library-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.library-logo {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(45,91,227,0.3);
+}
+
+.library-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+
+.library-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.library-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.lib-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all var(--transition-fast);
+}
+
+.lib-btn-primary {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 8px rgba(45,91,227,0.25);
+}
+
+.lib-btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+
+.lib-btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.lib-btn-secondary:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.library-search {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.library-search input {
+  width: 100%;
+  padding: 10px 16px 10px 40px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.library-search input:focus {
+  border-color: var(--accent);
+  background: var(--bg-canvas);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.library-search input::placeholder { color: var(--text-tertiary); }
+
+.library-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.library-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+
+.lib-tab {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.lib-tab.active {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.library-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.doc-card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  animation: slideUp 0.4s ease both;
+}
+
+.doc-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent);
+}
+
+.doc-card-thumb {
+  height: 180px;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.doc-card-thumb canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.doc-card-thumb .thumb-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+}
+
+.doc-card-thumb .thumb-placeholder svg { opacity: 0.4; }
+
+.doc-card-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--border);
+}
+
+.doc-card-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.5s ease;
+}
+
+.doc-card-info {
+  padding: 12px;
+}
+
+.doc-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.doc-card-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Empty state */
+.library-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+  animation: fadeIn 0.5s ease;
+}
+
+.library-empty-icon {
+  width: 80px;
+  height: 80px;
+  background: var(--bg-secondary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  color: var(--text-tertiary);
+}
+
+.library-empty h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.library-empty p {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* Drop zone */
+.drop-zone-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(45,91,227,0.08);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+.drop-zone-box {
+  padding: 48px 64px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-xl);
+  background: var(--bg-canvas);
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.drop-zone-box svg { color: var(--accent); margin-bottom: 16px; }
+.drop-zone-box h3 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+.drop-zone-box p { font-size: 14px; color: var(--text-tertiary); }
+
+/* ===== READER ===== */
+.reader-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Top Bar */
+.reader-topbar {
+  height: var(--topbar-height);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  z-index: 100;
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+}
+
+.reader-topbar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.topbar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.topbar-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.topbar-btn.active { background: var(--accent-soft); color: var(--accent); }
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* Reader Body */
+.reader-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Side Panel */
+.side-panel {
+  width: var(--panel-width);
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  animation: slideRight 0.2s ease;
+}
+
+.side-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 8px 0;
+  gap: 2px;
+}
+
+.sp-tab {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.sp-tab:hover { color: var(--text-secondary); }
+.sp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.side-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* Thumbnails */
+.thumb-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thumb-item {
+  background: var(--bg-canvas);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thumb-item:hover { border-color: var(--accent); }
+.thumb-item.active { border-color: var(--accent); background: var(--accent-soft); }
+
+.thumb-item canvas {
+  width: 60px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.thumb-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Outline */
+.outline-item {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  border-left: 2px solid transparent;
+}
+
+.outline-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.outline-item.active { border-left-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.outline-item-l1 { padding-left: 10px; font-weight: 600; }
+.outline-item-l2 { padding-left: 24px; }
+.outline-item-l3 { padding-left: 38px; font-size: 12px; }
+
+/* Bookmarks */
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.bookmark-item:hover { background: var(--bg-secondary); }
+
+.bookmark-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.bookmark-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-page {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bookmark-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bookmark-remove {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.bookmark-item:hover .bookmark-remove { opacity: 1; }
+
+/* Annotations Panel */
+.annotation-item {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-left: 3px solid;
+}
+
+.annotation-item:hover { background: var(--bg-secondary); }
+
+.annotation-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  font-family: var(--font-reading);
+  margin-bottom: 4px;
+}
+
+.annotation-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Reading Canvas */
+.reading-canvas {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-secondary);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  scroll-behavior: smooth;
+}
+
+.page-container {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.page-wrapper {
+  position: relative;
+  box-shadow: var(--shadow-page);
+  border-radius: 2px;
+  overflow: hidden;
+  background: white;
+  transition: box-shadow var(--transition-smooth);
+}
+
+[data-theme="dark"] .page-wrapper { background: #faf9f7; }
+[data-theme="sepia"] .page-wrapper { background: #fefcf7; }
+
+.page-wrapper canvas {
+  display: block;
+}
+
+.page-number-label {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 4px 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Text selection layer */
+.text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1;
+}
+
+.text-layer span {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0% 0%;
+  color: transparent;
+}
+
+.text-layer ::selection {
+  background: var(--accent);
+  color: transparent;
+}
+
+/* Highlight overlays */
+.highlight-overlay {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+/* Status Bar */
+.reader-statusbar {
+  height: var(--statusbar-height);
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  z-index: 100;
+  transition: opacity var(--transition-smooth);
+}
+
+.reader-statusbar.hidden { opacity: 0; pointer-events: none; }
+
+.status-left, .status-right { display: flex; align-items: center; gap: 12px; }
+
+.status-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-strong);
+}
+
+/* Page Slider */
+.page-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+}
+
+.page-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+/* ===== SEARCH OVERLAY ===== */
+.search-overlay {
+  position: absolute;
+  top: var(--topbar-height);
+  right: 12px;
+  width: 320px;
+  max-height: 400px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.2s ease;
+  overflow: hidden;
+}
+
+.search-input-wrap {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-input-wrap input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.search-input-wrap input::placeholder { color: var(--text-tertiary); }
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.search-result-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.search-result-item:hover { background: var(--bg-secondary); }
+.search-result-item.active { background: var(--accent-soft); }
+
+.search-result-page {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.search-result-context {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.search-result-context mark {
+  background: var(--highlight-yellow);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.search-count {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border);
+}
+
+/* ===== ANNOTATION TOOLBAR ===== */
+.annotation-toolbar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: var(--shadow-lg);
+  z-index: 300;
+  animation: slideUp 0.2s ease;
+}
+
+.anno-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.anno-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.anno-btn.active { background: var(--accent-soft); color: var(--accent); }
+
+.anno-separator {
+  width: 1px;
+  height: 24px;
+  background: var(--border-strong);
+  margin: 0 4px;
+}
+
+.color-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.color-dot:hover { transform: scale(1.15); }
+.color-dot.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-canvas); }
+
+/* ===== CONTEXT MENU ===== */
+.context-menu {
+  position: fixed;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 400;
+  min-width: 180px;
+  padding: 6px;
+  animation: scaleIn 0.15s ease;
+}
+
+.ctx-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+}
+
+.ctx-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.ctx-item svg { flex-shrink: 0; }
+
+/* ===== SETTINGS MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(4px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  background: var(--bg-canvas);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: scaleIn 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.setting-group {
+  margin-bottom: 24px;
+}
+
+.setting-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.setting-label {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Toggle Switch */
+.toggle {
+  width: 44px;
+  height: 24px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.toggle.active { background: var(--accent); }
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle.active::after { transform: translateX(20px); }
+
+/* Theme Picker */
+.theme-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-option {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.theme-option:hover { border-color: var(--text-tertiary); }
+.theme-option.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.theme-light { background: #faf9f7; color: #1a1a2e; }
+.theme-dark { background: #1a1a24; color: #e8e8f0; }
+.theme-sepia { background: #f4ece1; color: #3d3229; }
+
+/* ===== FOCUS MODE ===== */
+.focus-mode .reader-topbar,
+.focus-mode .reader-statusbar,
+.focus-mode .side-panel {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.focus-mode .reading-canvas {
+  background: var(--bg-primary);
+}
+
+.focus-mode .page-container {
+  padding-top: 40px;
+}
+
+/* ===== LOADING ===== */
+.loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  gap: 16px;
+  color: var(--text-tertiary);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text-primary);
+  color: var(--bg-canvas);
+  padding: 10px 20px;
+  border-radius: var(--radius-xl);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  z-index: 600;
+  animation: slideUp 0.3s ease, fadeIn 0.3s ease;
+  pointer-events: none;
+}
+
+/* ===== READING RULER ===== */
+.reading-ruler {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 50;
+  transition: top 0.1s ease;
+}
+
+/* ===== DRAWING CANVAS ===== */
+.drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  z-index: 10;
+  touch-action: none;
+}
+
+/* ===== DOC CARD DELETE ===== */
+.doc-card-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: all var(--transition-fast);
+  z-index: 2;
+}
+.doc-card:hover .doc-card-delete { opacity: 1; }
+.doc-card-delete:hover { color: #e53e3e; background: #fee; border-color: #e53e3e; }
+
+.doc-card-thumb { position: relative; }
+
+/* ===== LOADING PROGRESS ===== */
+.load-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 200;
+}
+.load-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ===== SIDEBAR BACKDROP (mobile) ===== */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 149;
+  animation: fadeIn 0.2s ease;
+}
+
+/* ===== PAGE PLACEHOLDER ===== */
+.page-placeholder {
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .side-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 150;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .search-overlay {
+    width: calc(100% - 24px);
+    right: 12px;
+  }
+
+  .annotation-toolbar {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .topbar-btn { min-width: 44px; min-height: 44px; }
+  .anno-btn { min-width: 44px; min-height: 44px; }
+
+  .reader-topbar {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .reader-statusbar {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Print */
+@media print {
+  .reader-topbar, .reader-statusbar, .side-panel, .annotation-toolbar { display: none !important; }
+  .reading-canvas { overflow: visible !important; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ===== PDF Reader Pro — Full Application =====
+// Consumer-ready PWA with IndexedDB persistence, virtualized scrolling,
+// text selection, annotations, freehand drawing, and mobile optimization.
+
+const { pdfjsLib } = globalThis;
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ===== ICONS (inline SVG) =====
+const Icons = {
+  back: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>`,
+  search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+  bookmark: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`,
+  bookmarkFill: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`,
+  sidebar: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>`,
+  settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  plus: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>`,
+  file: `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/></svg>`,
+  upload: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>`,
+  x: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+  highlight: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>`,
+  pen: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`,
+  note: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>`,
+  eraser: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>`,
+  undo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`,
+  redo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>`,
+  zoomIn: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>`,
+  zoomOut: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg>`,
+  focus: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  moon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
+  list: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>`,
+  grid: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></svg>`,
+  trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+  copy: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
+  download: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`,
+  chevLeft: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>`,
+  chevRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
+  ruler: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>`,
+};
+
+// ===== STATE MANAGEMENT =====
+const DB_NAME = 'PDFReaderPro';
+const DB_VERSION = 2;
+
+class Store {
+  constructor() {
+    this.state = {
+      view: 'library',
+      theme: localStorage.getItem('pdfr-theme') || 'light',
+      documents: JSON.parse(localStorage.getItem('pdfr-docs') || '[]'),
+      currentDoc: null,
+      currentPage: 1,
+      totalPages: 0,
+      zoom: 1,
+      fitMode: 'width',
+      sidePanel: false,
+      sidePanelTab: 'thumbnails',
+      searchOpen: false,
+      searchQuery: '',
+      searchResults: [],
+      bookmarks: JSON.parse(localStorage.getItem('pdfr-bookmarks') || '{}'),
+      annotations: JSON.parse(localStorage.getItem('pdfr-annotations') || '{}'),
+      annotationMode: null,
+      highlightColor: 'yellow',
+      focusMode: false,
+      showRuler: false,
+      rulerY: 300,
+      settingsOpen: false,
+      showAnnotationBar: true,
+      continuousScroll: true,
+      toast: null,
+      isDragging: false,
+      pdfDoc: null,
+      outline: [],
+      loading: false,
+      loadProgress: 0,
+      undoStack: [],
+    };
+    this.listeners = new Set();
+    this._prevView = 'library';
+  }
+
+  getState() { return this.state; }
+
+  setState(updates) {
+    const prev = this.state;
+    this.state = { ...this.state, ...updates };
+    this.listeners.forEach(fn => fn(this.state, prev));
+  }
+
+  subscribe(fn) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  persistDocs() {
+    const docs = this.state.documents.map(d => ({
+      id: d.id, name: d.name, pageCount: d.pageCount,
+      lastPage: d.lastPage, lastOpened: d.lastOpened, progress: d.progress, size: d.size
+    }));
+    localStorage.setItem('pdfr-docs', JSON.stringify(docs));
+  }
+
+  persistBookmarks() {
+    localStorage.setItem('pdfr-bookmarks', JSON.stringify(this.state.bookmarks));
+  }
+
+  persistAnnotations() {
+    localStorage.setItem('pdfr-annotations', JSON.stringify(this.state.annotations));
+  }
+
+  setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('pdfr-theme', theme);
+    this.setState({ theme });
+  }
+}
+
+const store = new Store();
+document.documentElement.setAttribute('data-theme', store.getState().theme);
+
+// ===== INDEXEDDB STORAGE =====
+class DocStorage {
+  async open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('files')) {
+          db.createObjectStore('files', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async saveFile(docId, arrayBuffer) {
+    try {
+      const db = await this.open();
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').put({ id: docId, data: arrayBuffer });
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) {
+      console.warn('IndexedDB save failed:', e);
+    }
+  }
+
+  async getFile(docId) {
+    try {
+      const db = await this.open();
+      const tx = db.transaction('files', 'readonly');
+      const req = tx.objectStore('files').get(docId);
+      return new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result?.data || null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      console.warn('IndexedDB read failed:', e);
+      return null;
+    }
+  }
+
+  async deleteFile(docId) {
+    try {
+      const db = await this.open();
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').delete(docId);
+    } catch (e) {
+      console.warn('IndexedDB delete failed:', e);
+    }
+  }
+}
+
+const docStorage = new DocStorage();
+
+// ===== PDF ENGINE =====
+class PDFEngine {
+  constructor() {
+    this.doc = null;
+    this.renderTasks = new Map();
+    this.pageTextContents = new Map();
+    this.pageDimCache = new Map();
+    this.renderScale = window.devicePixelRatio || 1;
+    this._lastBuffer = null;
+  }
+
+  async loadDocument(file, onProgress) {
+    const arrayBuffer = await file.arrayBuffer();
+    return this.loadFromBuffer(arrayBuffer, onProgress);
+  }
+
+  async loadFromBuffer(arrayBuffer, onProgress) {
+    this._lastBuffer = arrayBuffer;
+    this.pageDimCache.clear();
+    this.pageTextContents.clear();
+    this.renderTasks.forEach(t => { try { t.cancel(); } catch(_){} });
+    this.renderTasks.clear();
+
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    if (onProgress) {
+      loadingTask.onProgress = ({ loaded, total }) => {
+        if (total > 0) onProgress(Math.min(99, Math.round((loaded / total) * 100)));
+      };
+    }
+    this.doc = await loadingTask.promise;
+
+    // Cache page 1 dimensions immediately (needed for scale calc)
+    const p1 = await this.doc.getPage(1);
+    const vp1 = p1.getViewport({ scale: 1 });
+    this.pageDimCache.set(1, { width: vp1.width, height: vp1.height });
+
+    // Get outline in background (don't block)
+    let outline = [];
+    this.doc.getOutline().then(ol => {
+      if (ol) this.processOutline(ol).then(o => { outline = o; });
+    }).catch(() => {});
+
+    return { doc: this.doc, pageCount: this.doc.numPages, outline, arrayBuffer };
+  }
+
+  async processOutline(items, level = 0) {
+    const result = [];
+    for (const item of items) {
+      let pageNum = 1;
+      try {
+        if (item.dest) {
+          const dest = typeof item.dest === 'string'
+            ? await this.doc.getDestination(item.dest)
+            : item.dest;
+          if (dest) {
+            const idx = await this.doc.getPageIndex(dest[0]);
+            pageNum = idx + 1;
+          }
+        }
+      } catch(_) {}
+      const entry = { title: item.title, page: pageNum, level, children: [] };
+      if (item.items && item.items.length > 0) {
+        entry.children = await this.processOutline(item.items, level + 1);
+      }
+      result.push(entry);
+    }
+    return result;
+  }
+
+  async renderPage(pageNum, canvas, scale = 1) {
+    if (this.renderTasks.has(pageNum)) {
+      try { this.renderTasks.get(pageNum).cancel(); } catch(_) {}
+    }
+    const page = await this.doc.getPage(pageNum);
+
+    // Cache unscaled dims so we never need to getPage again for dimensions
+    if (!this.pageDimCache.has(pageNum)) {
+      const vp0 = page.getViewport({ scale: 1 });
+      this.pageDimCache.set(pageNum, { width: vp0.width, height: vp0.height });
+    }
+
+    const viewport = page.getViewport({ scale: scale * this.renderScale });
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.style.width = (viewport.width / this.renderScale) + 'px';
+    canvas.style.height = (viewport.height / this.renderScale) + 'px';
+
+    const ctx = canvas.getContext('2d');
+    const renderTask = page.render({ canvasContext: ctx, viewport });
+    this.renderTasks.set(pageNum, renderTask);
+
+    try {
+      await renderTask.promise;
+    } catch (e) {
+      if (e.name !== 'RenderingCancelled') throw e;
+    }
+    this.renderTasks.delete(pageNum);
+    return { width: viewport.width / this.renderScale, height: viewport.height / this.renderScale };
+  }
+
+  async renderTextLayer(pageNum, container, scale) {
+    const existing = container.querySelector('.text-layer');
+    if (existing) existing.remove();
+
+    const page = await this.doc.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const textContent = await page.getTextContent();
+
+    const textLayer = document.createElement('div');
+    textLayer.className = 'text-layer';
+    textLayer.style.width = (viewport.width / this.renderScale) + 'px';
+    textLayer.style.height = (viewport.height / this.renderScale) + 'px';
+
+    for (const item of textContent.items) {
+      if (!item.str) continue;
+      const span = document.createElement('span');
+      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
+      const divHeight = fontHeight / this.renderScale;
+      span.style.left = (tx[4] / this.renderScale) + 'px';
+      span.style.top = ((tx[5] - fontHeight) / this.renderScale) + 'px';
+      span.style.fontSize = divHeight + 'px';
+      span.style.fontFamily = 'sans-serif';
+      span.textContent = item.str;
+
+      if (item.width > 0) {
+        const targetW = item.width * scale;
+        span.style.width = (targetW / this.renderScale) + 'px';
+        span.dataset.targetW = (targetW / this.renderScale);
+      }
+      textLayer.appendChild(span);
+    }
+    container.appendChild(textLayer);
+
+    // Adjust scaleX to match PDF glyph widths
+    requestAnimationFrame(() => {
+      for (const span of textLayer.querySelectorAll('span')) {
+        if (span.dataset.targetW && span.textContent.trim()) {
+          const targetW = parseFloat(span.dataset.targetW);
+          const actualW = span.getBoundingClientRect().width;
+          if (actualW > 0 && Math.abs(targetW - actualW) > 1) {
+            span.style.transform = `scaleX(${targetW / actualW})`;
+            span.style.transformOrigin = '0% 0%';
+          }
+          delete span.dataset.targetW;
+        }
+      }
+    });
+  }
+
+  async renderThumbnail(pageNum, canvas, width = 120) {
+    const page = await this.doc.getPage(pageNum);
+    const vp = page.getViewport({ scale: 1 });
+    const scale = width / vp.width;
+    const viewport = page.getViewport({ scale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.style.width = viewport.width + 'px';
+    canvas.style.height = viewport.height + 'px';
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  }
+
+  async getPageText(pageNum) {
+    if (this.pageTextContents.has(pageNum)) return this.pageTextContents.get(pageNum);
+    const page = await this.doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const text = content.items.map(item => item.str).join(' ');
+    this.pageTextContents.set(pageNum, text);
+    return text;
+  }
+
+  async searchText(query) {
+    if (!query || !this.doc) return [];
+    const results = [];
+    const lowerQuery = query.toLowerCase();
+    for (let i = 1; i <= this.doc.numPages; i++) {
+      const text = await this.getPageText(i);
+      const lowerText = text.toLowerCase();
+      let idx = 0;
+      while ((idx = lowerText.indexOf(lowerQuery, idx)) !== -1) {
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(text.length, idx + query.length + 40);
+        let context = text.substring(start, end);
+        if (start > 0) context = '...' + context;
+        if (end < text.length) context += '...';
+        results.push({ page: i, context, matchIndex: idx - start + (start > 0 ? 3 : 0), matchLength: query.length });
+        idx += query.length;
+      }
+    }
+    return results;
+  }
+
+  async getPageDimensions(pageNum) {
+    if (this.pageDimCache.has(pageNum)) return this.pageDimCache.get(pageNum);
+    const page = await this.doc.getPage(pageNum);
+    const vp = page.getViewport({ scale: 1 });
+    const dims = { width: vp.width, height: vp.height };
+    this.pageDimCache.set(pageNum, dims);
+    return dims;
+  }
+}
+
+const engine = new PDFEngine();
+
+// ===== UTILITY =====
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+  return d.toLocaleDateString();
+}
+
+function showToast(msg) {
+  store.setState({ toast: msg });
+  setTimeout(() => store.setState({ toast: null }), 2500);
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ===== FILE HANDLING =====
+async function handleFileOpen(file) {
+  if (!file || file.type !== 'application/pdf') {
+    showToast('Please select a valid PDF file');
+    return;
+  }
+  store.setState({ loading: true, loadProgress: 0, view: 'reader' });
+
+  try {
+    // Read file buffer and make a copy for IndexedDB before pdf.js detaches the original
+    const arrayBuffer = await file.arrayBuffer();
+    const bufferForDB = arrayBuffer.slice(0);
+
+    const { doc, pageCount, outline } = await engine.loadFromBuffer(arrayBuffer, (pct) => {
+      store.setState({ loadProgress: pct });
+    });
+
+    const docId = generateId();
+    const docInfo = {
+      id: docId,
+      name: file.name.replace(/\.pdf$/i, ''),
+      pageCount,
+      lastPage: 1,
+      lastOpened: Date.now(),
+      progress: 0,
+      size: file.size,
+    };
+
+    // Check if doc already exists
+    const existing = store.getState().documents.find(d => d.name === docInfo.name && d.size === file.size);
+    if (existing) {
+      docInfo.id = existing.id;
+      docInfo.lastPage = existing.lastPage || 1;
+      docInfo.progress = existing.progress || 0;
+      const docs = store.getState().documents.map(d => d.id === existing.id ? { ...d, ...docInfo } : d);
+      store.setState({ documents: docs });
+    } else {
+      store.setState({ documents: [...store.getState().documents, docInfo] });
+    }
+
+    // Persist PDF data to IndexedDB (using the pre-detachment copy)
+    docStorage.saveFile(docInfo.id, bufferForDB).catch(() => {});
+
+    store.setState({
+      currentDoc: docInfo,
+      pdfDoc: doc,
+      totalPages: pageCount,
+      currentPage: docInfo.lastPage,
+      outline,
+      loading: false,
+      loadProgress: 0,
+      zoom: 1,
+      fitMode: 'width',
+      undoStack: [],
+    });
+    store.persistDocs();
+
+    requestAnimationFrame(() => window.dispatchEvent(new Event('pdf-loaded')));
+  } catch (err) {
+    console.error('Failed to load PDF:', err);
+    store.setState({ loading: false, loadProgress: 0, view: 'library' });
+    if (err.name === 'PasswordException') {
+      showToast('This PDF is password-protected.');
+    } else {
+      showToast('Failed to load PDF. The file may be corrupted.');
+    }
+  }
+}
+
+async function handleOpenFromLibrary(docId) {
+  const doc = store.getState().documents.find(d => d.id === docId);
+  if (!doc) return;
+
+  store.setState({ loading: true, loadProgress: 0, view: 'reader' });
+
+  try {
+    const buffer = await docStorage.getFile(docId);
+    if (buffer) {
+      const { doc: pdfDoc, pageCount, outline } = await engine.loadFromBuffer(buffer, (pct) => {
+        store.setState({ loadProgress: pct });
+      });
+      store.setState({
+        currentDoc: { ...doc, lastOpened: Date.now() },
+        pdfDoc,
+        totalPages: pageCount,
+        currentPage: doc.lastPage || 1,
+        outline,
+        loading: false,
+        zoom: 1,
+        fitMode: 'width',
+        undoStack: [],
+      });
+      const docs = store.getState().documents.map(d => d.id === docId ? { ...d, lastOpened: Date.now() } : d);
+      store.setState({ documents: docs });
+      store.persistDocs();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('pdf-loaded')));
+    } else {
+      store.setState({ loading: false, view: 'library' });
+      showToast('File not found. Please re-open the PDF.');
+      promptFileOpen();
+    }
+  } catch (err) {
+    console.error('Failed to open from library:', err);
+    store.setState({ loading: false, view: 'library' });
+    showToast('Failed to open document.');
+  }
+}
+
+async function deleteDocument(docId) {
+  await docStorage.deleteFile(docId);
+  const docs = store.getState().documents.filter(d => d.id !== docId);
+  const bookmarks = { ...store.getState().bookmarks };
+  delete bookmarks[docId];
+  const annotations = { ...store.getState().annotations };
+  delete annotations[docId];
+  store.setState({ documents: docs, bookmarks, annotations });
+  store.persistDocs();
+  store.persistBookmarks();
+  store.persistAnnotations();
+  showToast('Document removed');
+}
+
+function promptFileOpen() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf';
+  input.onchange = (e) => { if (e.target.files[0]) handleFileOpen(e.target.files[0]); };
+  input.click();
+}
+
+// ===== RENDER FUNCTIONS =====
+let currentView = null;
+
+function renderApp() {
+  const state = store.getState();
+  const root = document.getElementById('root');
+  currentView = state.view;
+
+  if (state.view === 'library') {
+    root.innerHTML = renderLibrary(state);
+    attachLibraryEvents();
+  } else {
+    root.innerHTML = renderReader(state);
+    attachReaderEvents();
+  }
+}
+
+// ===== LIBRARY VIEW =====
+function renderLibrary(state) {
+  const docs = state.documents.sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0));
+
+  return `
+    <div class="app-shell" data-view="library">
+      ${state.isDragging ? `
+        <div class="drop-zone-overlay">
+          <div class="drop-zone-box">
+            ${Icons.upload}
+            <h3>Drop PDF Here</h3>
+            <p>Release to open your document</p>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="library">
+        <div class="library-header">
+          <div class="library-brand">
+            <div class="library-logo">P</div>
+            <div>
+              <div class="library-title">PDF Reader Pro</div>
+              <div class="library-subtitle">Your reading workspace</div>
+            </div>
+          </div>
+
+          <div class="library-actions">
+            <button class="lib-btn lib-btn-primary" id="btn-open-file" aria-label="Open PDF file">
+              ${Icons.plus} Open PDF
+            </button>
+            <button class="lib-btn lib-btn-secondary" id="btn-settings-lib" aria-label="Settings">
+              ${Icons.settings}
+            </button>
+          </div>
+
+          ${docs.length > 0 ? `
+            <div class="library-search">
+              ${Icons.search}
+              <input type="text" placeholder="Search your library..." id="lib-search-input" aria-label="Search library">
+            </div>
+
+            <div class="library-tabs">
+              <button class="lib-tab active" data-tab="recent">Recent</button>
+              <button class="lib-tab" data-tab="all">All Files</button>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="library-content">
+          ${docs.length === 0 ? `
+            <div class="library-empty">
+              <div class="library-empty-icon">${Icons.file}</div>
+              <h3>Your library is empty</h3>
+              <p>Open a PDF to get started. You can also drag and drop files here.</p>
+            </div>
+          ` : `
+            <div class="library-grid" id="library-grid">
+              ${docs.map((doc, i) => `
+                <div class="doc-card" data-doc-id="${escapeHtml(doc.id)}" style="animation-delay: ${i * 0.05}s">
+                  <div class="doc-card-thumb">
+                    <button class="doc-card-delete" data-delete-id="${escapeHtml(doc.id)}" aria-label="Delete document" title="Remove">${Icons.trash}</button>
+                    <div class="thumb-placeholder">
+                      ${Icons.file}
+                      <span style="font-size:11px; font-weight:500;">${doc.pageCount || '?'} pages</span>
+                    </div>
+                    ${doc.progress > 0 ? `
+                      <div class="doc-card-progress">
+                        <div class="doc-card-progress-bar" style="width:${Math.round(doc.progress * 100)}%"></div>
+                      </div>
+                    ` : ''}
+                  </div>
+                  <div class="doc-card-info">
+                    <div class="doc-card-title">${escapeHtml(doc.name)}</div>
+                    <div class="doc-card-meta">
+                      <span>${formatFileSize(doc.size || 0)}</span>
+                      <span>&middot;</span>
+                      <span>${formatDate(doc.lastOpened)}</span>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+
+      ${state.settingsOpen ? renderSettingsModal(state) : ''}
+      ${state.toast ? `<div class="toast" role="status" aria-live="polite">${escapeHtml(state.toast)}</div>` : ''}
+    </div>
+  `;
+}
+
+// ===== READER VIEW =====
+function renderReader(state) {
+  const isBookmarked = state.bookmarks[state.currentDoc?.id]?.includes(state.currentPage);
+
+  return `
+    <div class="app-shell ${state.focusMode ? 'focus-mode' : ''}" data-view="reader">
+      <div class="reader-shell">
+        ${state.loading ? `<div class="load-progress"><div class="load-progress-bar" style="width:${state.loadProgress || 5}%"></div></div>` : ''}
+        <div class="reader-topbar ${state.focusMode ? 'hidden' : ''}">
+          <button class="topbar-btn" id="btn-back" title="Back to Library" aria-label="Back to Library">${Icons.back}</button>
+          <button class="topbar-btn ${state.sidePanel ? 'active' : ''}" id="btn-sidebar" title="Toggle Sidebar" aria-label="Toggle Sidebar">${Icons.sidebar}</button>
+          <div class="topbar-title">${escapeHtml(state.currentDoc?.name || 'Document')}</div>
+          <button class="topbar-btn" id="btn-zoom-out" title="Zoom Out" aria-label="Zoom Out">${Icons.zoomOut}</button>
+          <span id="zoom-display" style="font-size:12px;color:var(--text-tertiary);min-width:40px;text-align:center;font-variant-numeric:tabular-nums">${Math.round(state.zoom * 100)}%</span>
+          <button class="topbar-btn" id="btn-zoom-in" title="Zoom In" aria-label="Zoom In">${Icons.zoomIn}</button>
+          <button class="topbar-btn" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">${Icons.search}</button>
+          <button class="topbar-btn" id="btn-bookmark" title="Bookmark (Ctrl+B)" aria-label="Bookmark">${isBookmarked ? Icons.bookmarkFill : Icons.bookmark}</button>
+          <button class="topbar-btn" id="btn-focus" title="Focus Mode" aria-label="Focus Mode">${Icons.focus}</button>
+          <button class="topbar-btn" id="btn-ruler" title="Reading Ruler" aria-label="Reading Ruler">${Icons.ruler}</button>
+          <button class="topbar-btn" id="btn-settings" title="Settings" aria-label="Settings">${Icons.settings}</button>
+        </div>
+
+        <div class="reader-body">
+          ${state.sidePanel ? renderSidePanel(state) : ''}
+          <div class="reading-canvas" id="reading-canvas" role="main">
+            ${state.loading ? `
+              <div class="loading-wrap">
+                <div class="spinner"></div>
+                <span>Loading document...</span>
+              </div>
+            ` : `
+              <div class="page-container" id="page-container"></div>
+            `}
+          </div>
+        </div>
+
+        <div class="reader-statusbar ${state.focusMode ? 'hidden' : ''}">
+          <div class="status-left">
+            <span id="page-info">Page <strong>${state.currentPage}</strong> of ${state.totalPages}</span>
+            <div class="status-divider"></div>
+            <div class="page-slider-wrap">
+              <input type="range" class="page-slider" id="page-slider"
+                min="1" max="${state.totalPages}" value="${state.currentPage}" aria-label="Page slider">
+            </div>
+          </div>
+          <div class="status-right">
+            <span id="zoom-info">${Math.round(state.zoom * 100)}%</span>
+            <div class="status-divider"></div>
+            <span id="read-pct">${Math.round((state.currentPage / Math.max(state.totalPages, 1)) * 100)}% read</span>
+          </div>
+        </div>
+
+        ${state.searchOpen ? renderSearchOverlay(state) : ''}
+        ${state.showAnnotationBar && !state.focusMode ? renderAnnotationToolbar(state) : ''}
+      </div>
+
+      ${state.showRuler ? `<div class="reading-ruler" style="top:${state.rulerY}px"></div>` : ''}
+      ${state.settingsOpen ? renderSettingsModal(state) : ''}
+      ${state.toast ? `<div class="toast" role="status" aria-live="polite">${escapeHtml(state.toast)}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderSidePanel(state) {
+  const isMobile = window.innerWidth <= 768;
+  return `
+    ${isMobile ? '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>' : ''}
+    <div class="side-panel" role="navigation">
+      <div class="side-panel-tabs">
+        <button class="sp-tab ${state.sidePanelTab === 'thumbnails' ? 'active' : ''}" data-sptab="thumbnails">Pages</button>
+        <button class="sp-tab ${state.sidePanelTab === 'outline' ? 'active' : ''}" data-sptab="outline">Outline</button>
+        <button class="sp-tab ${state.sidePanelTab === 'bookmarks' ? 'active' : ''}" data-sptab="bookmarks">Bookmarks</button>
+        <button class="sp-tab ${state.sidePanelTab === 'annotations' ? 'active' : ''}" data-sptab="annotations">Notes</button>
+      </div>
+      <div class="side-panel-content" id="sp-content">
+        ${renderSidePanelContent(state)}
+      </div>
+    </div>
+  `;
+}
+
+function renderSidePanelContent(state) {
+  switch (state.sidePanelTab) {
+    case 'thumbnails':
+      return `<div class="thumb-grid" id="thumb-grid">
+        ${Array.from({ length: state.totalPages }, (_, i) => `
+          <div class="thumb-item ${state.currentPage === i + 1 ? 'active' : ''}" data-page="${i + 1}">
+            <canvas id="thumb-canvas-${i + 1}"></canvas>
+            <span class="thumb-label">Page ${i + 1}</span>
+          </div>
+        `).join('')}
+      </div>`;
+    case 'outline':
+      if (!state.outline || state.outline.length === 0) {
+        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No outline available for this document</div>`;
+      }
+      return renderOutlineItems(state.outline);
+    case 'bookmarks':
+      const docBookmarks = state.bookmarks[state.currentDoc?.id] || [];
+      if (docBookmarks.length === 0) {
+        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No bookmarks yet. Click the bookmark icon to add one.</div>`;
+      }
+      return docBookmarks.map(p => `
+        <div class="bookmark-item" data-page="${p}">
+          <div class="bookmark-dot"></div>
+          <div class="bookmark-info">
+            <div class="bookmark-page">Page ${p}</div>
+            <div class="bookmark-label">Bookmarked</div>
+          </div>
+          <button class="bookmark-remove topbar-btn" data-remove-bm="${p}" style="width:28px;height:28px" aria-label="Remove bookmark">${Icons.trash}</button>
+        </div>
+      `).join('');
+    case 'annotations':
+      const docAnnos = state.annotations[state.currentDoc?.id] || [];
+      if (docAnnos.length === 0) {
+        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No annotations yet. Use the toolbar to highlight or add notes.</div>`;
+      }
+      return docAnnos.sort((a, b) => a.page - b.page).map(a => `
+        <div class="annotation-item" data-page="${a.page}"
+             style="border-left-color: var(--highlight-${a.color || 'yellow'})">
+          <div class="annotation-text">${escapeHtml(a.text || a.content || 'Highlight')}</div>
+          <div class="annotation-meta">Page ${a.page} &middot; ${a.type} &middot; ${formatDate(a.created)}</div>
+        </div>
+      `).join('');
+    default:
+      return '';
+  }
+}
+
+function renderOutlineItems(items) {
+  return items.map(item => `
+    <div class="outline-item outline-item-l${Math.min(item.level + 1, 3)}" data-page="${item.page}">
+      ${escapeHtml(item.title)}
+    </div>
+    ${item.children ? renderOutlineItems(item.children) : ''}
+  `).join('');
+}
+
+function renderSearchOverlay(state) {
+  return `
+    <div class="search-overlay" id="search-overlay">
+      <div class="search-input-wrap">
+        ${Icons.search}
+        <input type="text" placeholder="Search in document..." id="search-input"
+               value="${escapeHtml(state.searchQuery)}" autofocus aria-label="Search in document">
+        <button class="topbar-btn" id="btn-close-search" style="width:28px;height:28px" aria-label="Close search">${Icons.x}</button>
+      </div>
+      <div class="search-results" id="search-results">
+        ${state.searchResults.length === 0 && state.searchQuery ?
+          `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No results found</div>` :
+          state.searchResults.map((r, i) => {
+            const before = escapeHtml(r.context.substring(0, r.matchIndex));
+            const match = escapeHtml(r.context.substring(r.matchIndex, r.matchIndex + r.matchLength));
+            const after = escapeHtml(r.context.substring(r.matchIndex + r.matchLength));
+            return `
+              <div class="search-result-item" data-page="${r.page}" data-idx="${i}">
+                <div class="search-result-page">Page ${r.page}</div>
+                <div class="search-result-context">${before}<mark>${match}</mark>${after}</div>
+              </div>
+            `;
+          }).join('')
+        }
+      </div>
+      ${state.searchResults.length > 0 ?
+        `<div class="search-count">${state.searchResults.length} result${state.searchResults.length !== 1 ? 's' : ''} found</div>` : ''}
+    </div>
+  `;
+}
+
+function renderAnnotationToolbar(state) {
+  const colors = ['yellow', 'green', 'blue', 'pink', 'purple'];
+  return `
+    <div class="annotation-toolbar">
+      <button class="anno-btn ${state.annotationMode === 'highlight' ? 'active' : ''}"
+              id="btn-anno-highlight" title="Highlight" aria-label="Highlight mode">${Icons.highlight}</button>
+      <button class="anno-btn ${state.annotationMode === 'underline' ? 'active' : ''}"
+              id="btn-anno-underline" title="Underline" aria-label="Underline mode" style="text-decoration:underline;font-weight:700;font-size:16px">U</button>
+      <button class="anno-btn ${state.annotationMode === 'note' ? 'active' : ''}"
+              id="btn-anno-note" title="Add Note" aria-label="Note mode">${Icons.note}</button>
+      <button class="anno-btn ${state.annotationMode === 'pen' ? 'active' : ''}"
+              id="btn-anno-pen" title="Freehand" aria-label="Freehand drawing mode">${Icons.pen}</button>
+      <div class="anno-separator"></div>
+      ${colors.map(c => `
+        <button class="anno-btn" style="width:32px;height:32px" data-color="${c}" title="${c}" aria-label="${c} color">
+          <div class="color-dot ${state.highlightColor === c ? 'active' : ''}"
+               style="background: var(--highlight-${c}); ${state.highlightColor === c ? 'border-color: var(--text-primary)' : ''}"></div>
+        </button>
+      `).join('')}
+      <div class="anno-separator"></div>
+      <button class="anno-btn" id="btn-anno-undo" title="Undo" aria-label="Undo">${Icons.undo}</button>
+      <button class="anno-btn" id="btn-anno-redo" title="Redo" aria-label="Redo">${Icons.redo}</button>
+    </div>
+  `;
+}
+
+function renderSettingsModal(state) {
+  return `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-content" role="dialog" aria-label="Settings">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button class="topbar-btn" id="btn-close-settings" aria-label="Close settings">${Icons.x}</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <div class="setting-group-title">Appearance</div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">Theme</div>
+                <div class="setting-desc">Choose your reading theme</div>
+              </div>
+            </div>
+            <div class="theme-picker" style="margin-top:8px">
+              <button class="theme-option theme-light ${state.theme === 'light' ? 'active' : ''}" data-theme="light">Light</button>
+              <button class="theme-option theme-dark ${state.theme === 'dark' ? 'active' : ''}" data-theme="dark">Dark</button>
+              <button class="theme-option theme-sepia ${state.theme === 'sepia' ? 'active' : ''}" data-theme="sepia">Sepia</button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <div class="setting-group-title">Reading</div>
+            <div class="setting-row">
+              <div class="setting-label">Continuous Scroll</div>
+              <div class="toggle ${state.continuousScroll ? 'active' : ''}" id="toggle-scroll" role="switch" aria-checked="${state.continuousScroll}"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Show Annotation Bar</div>
+              <div class="toggle ${state.showAnnotationBar ? 'active' : ''}" id="toggle-annobar" role="switch" aria-checked="${state.showAnnotationBar}"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Reading Ruler</div>
+              <div class="toggle ${state.showRuler ? 'active' : ''}" id="toggle-ruler" role="switch" aria-checked="${state.showRuler}"></div>
+            </div>
+          </div>
+          <div class="setting-group">
+            <div class="setting-group-title">About</div>
+            <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+              <strong>PDF Reader Pro</strong> v1.0<br>
+              A premium reading experience.<br>
+              Built with pdf.js rendering engine.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ===== VIRTUALIZED PAGE RENDERING =====
+let pagePositions = [];
+let renderedPages = new Set();
+let effectiveScale = 1;
+let _renderingPages = false;
+let _builtScale = null;
+let _builtMode = null;
+let _builtPageCount = 0;
+
+function computePageLayout() {
+  const state = store.getState();
+  if (!state.pdfDoc) return;
+
+  const canvas = document.getElementById('reading-canvas');
+  if (!canvas) return;
+  const canvasWidth = canvas.clientWidth - 40;
+  if (canvasWidth <= 0) return;
+
+  const dims1 = engine.pageDimCache.get(1) || { width: 612, height: 792 };
+  const fitWidthScale = canvasWidth / dims1.width;
+  effectiveScale = state.fitMode === 'width' ? fitWidthScale * state.zoom : state.zoom;
+
+  // Wrapper sizes must be in CSS pixels (NOT divided by dpr).
+  // renderPage sets canvas CSS size = dims * effectiveScale, so wrappers must match.
+  const defaultH = dims1.height * effectiveScale;
+  const defaultW = dims1.width * effectiveScale;
+
+  pagePositions = [];
+  let yOffset = 20;
+  for (let i = 1; i <= state.totalPages; i++) {
+    const cached = engine.pageDimCache.get(i);
+    const h = cached ? cached.height * effectiveScale : defaultH;
+    const w = cached ? cached.width * effectiveScale : defaultW;
+    pagePositions.push({ page: i, top: yOffset, height: h, width: w });
+    yOffset += h + 28;
+  }
+}
+
+function buildPagePlaceholders(force) {
+  const container = document.getElementById('page-container');
+  if (!container) return;
+
+  const state = store.getState();
+  const scaleKey = Math.round(effectiveScale * 1000);
+  const modeKey = state.continuousScroll;
+  const countKey = state.totalPages;
+
+  // Skip rebuild if layout hasn't changed (prevents destroying rendered canvases)
+  if (!force && scaleKey === _builtScale && modeKey === _builtMode && countKey === _builtPageCount && container.children.length > 0) {
+    return;
+  }
+
+  _builtScale = scaleKey;
+  _builtMode = modeKey;
+  _builtPageCount = countKey;
+
+  // Cancel any in-flight render tasks before clearing
+  engine.renderTasks.forEach(t => { try { t.cancel(); } catch(_){} });
+  engine.renderTasks.clear();
+
+  container.innerHTML = '';
+  renderedPages.clear();
+
+  const frag = document.createDocumentFragment();
+
+  if (state.continuousScroll) {
+    for (const pos of pagePositions) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'page-wrapper';
+      wrapper.id = `page-wrap-${pos.page}`;
+      wrapper.dataset.page = pos.page;
+      wrapper.style.cssText = `width:${pos.width}px;height:${pos.height}px;position:relative`;
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'page-placeholder';
+      placeholder.style.cssText = 'width:100%;height:100%';
+      placeholder.textContent = pos.page;
+      wrapper.appendChild(placeholder);
+
+      const label = document.createElement('div');
+      label.className = 'page-number-label';
+      label.textContent = pos.page;
+
+      frag.appendChild(wrapper);
+      frag.appendChild(label);
+    }
+  } else {
+    const pos = pagePositions[state.currentPage - 1];
+    if (!pos) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+    wrapper.id = `page-wrap-${pos.page}`;
+    wrapper.dataset.page = pos.page;
+    wrapper.style.cssText = `width:${pos.width}px;height:${pos.height}px;position:relative`;
+
+    const label = document.createElement('div');
+    label.className = 'page-number-label';
+    label.textContent = `Page ${state.currentPage} of ${state.totalPages}`;
+
+    frag.appendChild(wrapper);
+    frag.appendChild(label);
+  }
+
+  container.appendChild(frag);
+}
+
+async function renderVisiblePages(forceRebuild) {
+  const state = store.getState();
+  if (!state.pdfDoc || state.loading || _renderingPages) return;
+  _renderingPages = true;
+
+  try {
+    computePageLayout();
+    if (pagePositions.length === 0) { _renderingPages = false; return; }
+
+    buildPagePlaceholders(forceRebuild);
+
+    if (state.continuousScroll) {
+      // Only scroll to page on initial build
+      if (forceRebuild) {
+        const wrapper = document.getElementById(`page-wrap-${state.currentPage}`);
+        if (wrapper) wrapper.scrollIntoView({ block: 'start' });
+      }
+      await renderVisiblePagesLazy();
+    } else {
+      await renderSinglePage(state.currentPage);
+    }
+  } catch (e) {
+    console.error('renderVisiblePages error:', e);
+  }
+  _renderingPages = false;
+}
+
+async function renderSinglePage(pageNum) {
+  const wrapper = document.getElementById(`page-wrap-${pageNum}`);
+  if (!wrapper || renderedPages.has(pageNum)) return;
+  renderedPages.add(pageNum);
+
+  // Clear placeholder
+  const ph = wrapper.querySelector('.page-placeholder');
+  if (ph) ph.remove();
+
+  if (!wrapper.querySelector('canvas')) {
+    const cvs = document.createElement('canvas');
+    cvs.id = `page-canvas-${pageNum}`;
+    wrapper.appendChild(cvs);
+  }
+
+  const cvs = wrapper.querySelector('canvas');
+
+  // Render canvas (visual priority)
+  try {
+    await engine.renderPage(pageNum, cvs, effectiveScale);
+
+    // Correct wrapper size if actual dims differ from assumed (dims already cached by renderPage)
+    const dims = engine.pageDimCache.get(pageNum);
+    if (dims) {
+      const actualH = dims.height * effectiveScale;
+      const actualW = dims.width * effectiveScale;
+      if (Math.abs(wrapper.clientHeight - actualH) > 2) {
+        wrapper.style.width = actualW + 'px';
+        wrapper.style.height = actualH + 'px';
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'RenderingCancelled') console.error('Page render error:', e);
+    return;
+  }
+
+  // Defer text layer & overlays — don't block the visual render
+  requestAnimationFrame(() => {
+    engine.renderTextLayer(pageNum, wrapper, effectiveScale).catch(() => {});
+    renderHighlightsForPage(pageNum, wrapper);
+    renderFreehandForPage(pageNum, wrapper);
+    setupDrawingForPage(pageNum, wrapper);
+  });
+}
+
+async function renderVisiblePagesLazy() {
+  const canvas = document.getElementById('reading-canvas');
+  if (!canvas || pagePositions.length === 0) return;
+
+  const scrollTop = canvas.scrollTop;
+  const viewHeight = canvas.clientHeight;
+  const buffer = viewHeight;
+
+  const pagesToRender = [];
+  const pagesToUnload = [];
+
+  for (const pos of pagePositions) {
+    const pageBottom = pos.top + pos.height;
+    const inRange = pageBottom > (scrollTop - buffer) && pos.top < (scrollTop + viewHeight + buffer);
+
+    if (inRange && !renderedPages.has(pos.page)) {
+      pagesToRender.push(pos.page);
+    } else if (!inRange && renderedPages.has(pos.page)) {
+      const farAway = pos.top > (scrollTop + viewHeight * 5) || pageBottom < (scrollTop - viewHeight * 5);
+      if (farAway) pagesToUnload.push(pos.page);
+    }
+  }
+
+  // Unload far pages to save memory
+  for (const p of pagesToUnload) {
+    const wrapper = document.getElementById(`page-wrap-${p}`);
+    if (wrapper) {
+      const pos = pagePositions[p - 1];
+      wrapper.innerHTML = `<div class="page-placeholder" style="width:100%;height:100%">${p}</div>`;
+      wrapper.style.width = pos.width + 'px';
+      wrapper.style.height = pos.height + 'px';
+      renderedPages.delete(p);
+    }
+  }
+
+  // Render visible pages in parallel (max 3 concurrent)
+  const BATCH = 3;
+  for (let i = 0; i < pagesToRender.length; i += BATCH) {
+    await Promise.all(pagesToRender.slice(i, i + BATCH).map(p => renderSinglePage(p)));
+  }
+}
+
+async function renderThumbnails() {
+  const state = store.getState();
+  if (!state.pdfDoc) return;
+  const startPage = Math.max(1, state.currentPage - 5);
+  const endPage = Math.min(state.totalPages, state.currentPage + 10);
+  for (let i = startPage; i <= endPage; i++) {
+    const canvas = document.getElementById(`thumb-canvas-${i}`);
+    if (canvas && !canvas.dataset.rendered) {
+      canvas.dataset.rendered = 'true';
+      engine.renderThumbnail(i, canvas, 60).catch(() => {});
+    }
+  }
+}
+
+// ===== HIGHLIGHT / ANNOTATION RENDERING =====
+function renderHighlightsForPage(pageNum, wrapper) {
+  wrapper.querySelectorAll('.highlight-overlay').forEach(el => el.remove());
+
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  const docAnnos = state.annotations[docId] || [];
+  const pageAnnos = docAnnos.filter(a => a.page === pageNum && a.rects);
+  const wW = wrapper.clientWidth;
+  const wH = wrapper.clientHeight;
+
+  for (const anno of pageAnnos) {
+    for (const rect of anno.rects) {
+      const overlay = document.createElement('div');
+      overlay.className = 'highlight-overlay';
+      overlay.style.left = (rect.xPct * wW) + 'px';
+      overlay.style.top = (rect.yPct * wH) + 'px';
+      overlay.style.width = (rect.widthPct * wW) + 'px';
+      overlay.style.height = (rect.heightPct * wH) + 'px';
+
+      if (anno.type === 'underline') {
+        overlay.style.background = 'transparent';
+        overlay.style.borderBottom = `2px solid var(--highlight-${anno.color || 'yellow'})`;
+      } else {
+        overlay.style.background = `var(--highlight-${anno.color || 'yellow'})`;
+      }
+
+      if (anno.type === 'note' && anno.content) {
+        overlay.style.cursor = 'pointer';
+        overlay.title = anno.content;
+        overlay.style.pointerEvents = 'auto';
+      }
+
+      wrapper.appendChild(overlay);
+    }
+  }
+}
+
+function setupTextSelectionHandler() {
+  document.addEventListener('mouseup', (e) => {
+    const state = store.getState();
+    if (state.view !== 'reader') return;
+    if (!state.annotationMode || state.annotationMode === 'pen') return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
+
+    const range = selection.getRangeAt(0);
+    const textLayer = range.startContainer.parentElement?.closest('.text-layer');
+    const pageWrapper = textLayer?.closest('.page-wrapper');
+    if (!pageWrapper) return;
+
+    const pageNum = parseInt(pageWrapper.dataset.page);
+    if (!pageNum) return;
+
+    const rects = Array.from(range.getClientRects());
+    const wrapperRect = pageWrapper.getBoundingClientRect();
+    const wW = wrapperRect.width;
+    const wH = wrapperRect.height;
+
+    const relativeRects = rects.filter(r => r.width > 0 && r.height > 0).map(r => ({
+      xPct: (r.left - wrapperRect.left) / wW,
+      yPct: (r.top - wrapperRect.top) / wH,
+      widthPct: r.width / wW,
+      heightPct: r.height / wH,
+    }));
+
+    if (relativeRects.length === 0) return;
+
+    if (state.annotationMode === 'highlight' || state.annotationMode === 'underline') {
+      addAnnotation(state.annotationMode, pageNum, { text: selectedText, rects: relativeRects });
+      renderHighlightsForPage(pageNum, pageWrapper);
+      showToast('Annotation added');
+    } else if (state.annotationMode === 'note') {
+      const noteText = prompt('Add a note:');
+      if (noteText) {
+        addAnnotation('note', pageNum, { text: selectedText, content: noteText, rects: relativeRects });
+        renderHighlightsForPage(pageNum, pageWrapper);
+        showToast('Note added');
+      }
+    }
+
+    selection.removeAllRanges();
+  });
+}
+
+// ===== FREEHAND DRAWING =====
+function renderFreehandForPage(pageNum, wrapper) {
+  const existing = wrapper.querySelector('.freehand-canvas');
+  if (existing) existing.remove();
+
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  const docAnnos = state.annotations[docId] || [];
+  const freehandAnnos = docAnnos.filter(a => a.page === pageNum && a.type === 'freehand' && a.points);
+
+  if (freehandAnnos.length === 0) return;
+
+  const cvs = document.createElement('canvas');
+  cvs.className = 'freehand-canvas';
+  cvs.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+  cvs.width = wrapper.clientWidth * (window.devicePixelRatio || 1);
+  cvs.height = wrapper.clientHeight * (window.devicePixelRatio || 1);
+  const ctx = cvs.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const wW = wrapper.clientWidth;
+  const wH = wrapper.clientHeight;
+
+  const colorMap = {
+    yellow: 'rgba(255,213,79,0.7)', green: 'rgba(102,187,106,0.7)',
+    blue: 'rgba(66,165,245,0.7)', pink: 'rgba(240,98,146,0.7)', purple: 'rgba(171,130,255,0.7)'
+  };
+
+  for (const anno of freehandAnnos) {
+    if (anno.points.length < 2) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = colorMap[anno.color] || colorMap.yellow;
+    ctx.lineWidth = 2 * dpr;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const first = anno.points[0];
+    ctx.moveTo(first.xPct * wW * dpr, first.yPct * wH * dpr);
+    for (let i = 1; i < anno.points.length; i++) {
+      const pt = anno.points[i];
+      ctx.lineTo(pt.xPct * wW * dpr, pt.yPct * wH * dpr);
+    }
+    ctx.stroke();
+  }
+
+  wrapper.appendChild(cvs);
+}
+
+function setupDrawingForPage(pageNum, wrapper) {
+  const existingDraw = wrapper.querySelector('.drawing-canvas');
+  if (existingDraw) existingDraw.remove();
+
+  // Only create if pen mode
+  const state = store.getState();
+  if (state.annotationMode !== 'pen') return;
+
+  const drawCvs = document.createElement('canvas');
+  drawCvs.className = 'drawing-canvas';
+  drawCvs.width = wrapper.clientWidth * (window.devicePixelRatio || 1);
+  drawCvs.height = wrapper.clientHeight * (window.devicePixelRatio || 1);
+  const ctx = drawCvs.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const wW = wrapper.clientWidth;
+  const wH = wrapper.clientHeight;
+
+  let drawing = false;
+  let currentPath = [];
+
+  const colorMap = {
+    yellow: 'rgba(255,213,79,0.8)', green: 'rgba(102,187,106,0.8)',
+    blue: 'rgba(66,165,245,0.8)', pink: 'rgba(240,98,146,0.8)', purple: 'rgba(171,130,255,0.8)'
+  };
+
+  drawCvs.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    const rect = drawCvs.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    currentPath = [{ xPct: x / wW, yPct: y / wH }];
+    ctx.beginPath();
+    ctx.strokeStyle = colorMap[store.getState().highlightColor] || colorMap.yellow;
+    ctx.lineWidth = 2 * dpr;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.moveTo(x * dpr, y * dpr);
+    drawCvs.setPointerCapture(e.pointerId);
+  });
+
+  drawCvs.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const rect = drawCvs.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    currentPath.push({ xPct: x / wW, yPct: y / wH });
+    ctx.lineTo(x * dpr, y * dpr);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x * dpr, y * dpr);
+  });
+
+  drawCvs.addEventListener('pointerup', () => {
+    if (!drawing) return;
+    drawing = false;
+    if (currentPath.length > 1) {
+      addAnnotation('freehand', pageNum, {
+        points: currentPath,
+        color: store.getState().highlightColor,
+      });
+      // Re-render freehand layer
+      renderFreehandForPage(pageNum, wrapper);
+    }
+    // Clear drawing canvas
+    ctx.clearRect(0, 0, drawCvs.width, drawCvs.height);
+  });
+
+  wrapper.appendChild(drawCvs);
+}
+
+// ===== EVENT HANDLERS =====
+function attachLibraryEvents() {
+  document.getElementById('btn-open-file')?.addEventListener('click', promptFileOpen);
+
+  document.getElementById('btn-settings-lib')?.addEventListener('click', () => {
+    store.setState({ settingsOpen: true });
+  });
+
+  // Doc card clicks
+  document.querySelectorAll('.doc-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Ignore if delete button was clicked
+      if (e.target.closest('.doc-card-delete')) return;
+      const docId = card.dataset.docId;
+      handleOpenFromLibrary(docId);
+    });
+  });
+
+  // Doc card delete buttons
+  document.querySelectorAll('.doc-card-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const docId = btn.dataset.deleteId;
+      if (confirm('Remove this document from your library?')) {
+        deleteDocument(docId);
+      }
+    });
+  });
+
+  // Library search
+  document.getElementById('lib-search-input')?.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.doc-card').forEach(card => {
+      const title = card.querySelector('.doc-card-title')?.textContent?.toLowerCase() || '';
+      card.style.display = title.includes(query) ? '' : 'none';
+    });
+  });
+
+  // Drag & Drop
+  setupDragDrop();
+  attachSettingsEvents();
+}
+
+function setupDragDrop() {
+  document.addEventListener('dragover', (e) => { e.preventDefault(); store.setState({ isDragging: true }); });
+  document.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget === null) store.setState({ isDragging: false });
+  });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    store.setState({ isDragging: false });
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileOpen(file);
+  });
+}
+
+function attachReaderEvents() {
+  document.getElementById('btn-back')?.addEventListener('click', () => {
+    saveReadingProgress();
+    store.setState({ view: 'library', sidePanel: false, searchOpen: false, focusMode: false, annotationMode: null });
+  });
+
+  document.getElementById('btn-sidebar')?.addEventListener('click', () => {
+    store.setState({ sidePanel: !store.getState().sidePanel });
+  });
+
+  // Mobile sidebar backdrop
+  document.getElementById('sidebar-backdrop')?.addEventListener('click', () => {
+    store.setState({ sidePanel: false });
+  });
+
+  document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
+    const z = Math.min(store.getState().zoom + 0.15, 4);
+    store.setState({ zoom: z });
+    renderVisiblePages();
+  });
+
+  document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
+    const z = Math.max(store.getState().zoom - 0.15, 0.3);
+    store.setState({ zoom: z });
+    renderVisiblePages();
+  });
+
+  document.getElementById('btn-search')?.addEventListener('click', () => {
+    store.setState({ searchOpen: !store.getState().searchOpen });
+  });
+
+  document.getElementById('btn-bookmark')?.addEventListener('click', toggleBookmark);
+  document.getElementById('btn-focus')?.addEventListener('click', () => {
+    store.setState({ focusMode: !store.getState().focusMode });
+  });
+  document.getElementById('btn-ruler')?.addEventListener('click', () => {
+    store.setState({ showRuler: !store.getState().showRuler });
+  });
+  document.getElementById('btn-settings')?.addEventListener('click', () => {
+    store.setState({ settingsOpen: true });
+  });
+
+  document.getElementById('page-slider')?.addEventListener('input', (e) => {
+    goToPage(parseInt(e.target.value));
+  });
+
+  // Side panel tabs
+  document.querySelectorAll('.sp-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      store.setState({ sidePanelTab: tab.dataset.sptab });
+    });
+  });
+
+  document.getElementById('sp-content')?.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-page]');
+    if (item) goToPage(parseInt(item.dataset.page));
+    const removeBtn = e.target.closest('[data-remove-bm]');
+    if (removeBtn) {
+      e.stopPropagation();
+      removeBookmark(parseInt(removeBtn.dataset.removeBm));
+    }
+  });
+
+  // Search
+  const searchInput = document.getElementById('search-input');
+  let searchTimeout;
+  searchInput?.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    const query = e.target.value;
+    store.setState({ searchQuery: query });
+    searchTimeout = setTimeout(async () => {
+      if (query.length >= 2) {
+        const results = await engine.searchText(query);
+        store.setState({ searchResults: results });
+      } else {
+        store.setState({ searchResults: [] });
+      }
+    }, 300);
+  });
+
+  document.getElementById('btn-close-search')?.addEventListener('click', () => {
+    store.setState({ searchOpen: false, searchQuery: '', searchResults: [] });
+  });
+
+  document.getElementById('search-results')?.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-page]');
+    if (item) goToPage(parseInt(item.dataset.page));
+  });
+
+  // Annotation toolbar
+  document.getElementById('btn-anno-highlight')?.addEventListener('click', () => toggleAnnotationMode('highlight'));
+  document.getElementById('btn-anno-underline')?.addEventListener('click', () => toggleAnnotationMode('underline'));
+  document.getElementById('btn-anno-note')?.addEventListener('click', () => toggleAnnotationMode('note'));
+  document.getElementById('btn-anno-pen')?.addEventListener('click', () => {
+    toggleAnnotationMode('pen');
+    // Refresh drawing canvases on all rendered pages
+    refreshDrawingCanvases();
+  });
+
+  document.querySelectorAll('[data-color]').forEach(btn => {
+    btn.addEventListener('click', () => store.setState({ highlightColor: btn.dataset.color }));
+  });
+
+  document.getElementById('btn-anno-undo')?.addEventListener('click', undoAnnotation);
+  document.getElementById('btn-anno-redo')?.addEventListener('click', redoAnnotation);
+
+  // Scroll-driven lazy rendering
+  const readingCanvas = document.getElementById('reading-canvas');
+  let scrollRaf = null;
+  readingCanvas?.addEventListener('scroll', () => {
+    if (scrollRaf) cancelAnimationFrame(scrollRaf);
+    scrollRaf = requestAnimationFrame(() => {
+      updateCurrentPageFromScroll();
+      if (store.getState().continuousScroll) renderVisiblePagesLazy();
+    });
+  }, { passive: true });
+
+  // Keyboard
+  document.addEventListener('keydown', handleKeyboard);
+
+  // Ruler
+  if (store.getState().showRuler) {
+    document.addEventListener('mousemove', (e) => {
+      if (store.getState().showRuler) {
+        const r = document.querySelector('.reading-ruler');
+        if (r) r.style.top = e.clientY + 'px';
+      }
+    });
+  }
+
+  // Pinch-to-zoom
+  setupPinchZoom(readingCanvas);
+
+  // Swipe navigation (single-page mode)
+  setupSwipeNavigation(readingCanvas);
+
+  // Render pages — defer to next frame so the browser has laid out the DOM
+  if (store.getState().pdfDoc && !store.getState().loading) {
+    // Reset layout tracking so placeholders get built fresh
+    _builtScale = null;
+    requestAnimationFrame(() => {
+      renderVisiblePages(true);
+      if (store.getState().sidePanel && store.getState().sidePanelTab === 'thumbnails') {
+        setTimeout(renderThumbnails, 200);
+      }
+    });
+  }
+
+  attachSettingsEvents();
+  setupDragDrop();
+}
+
+function refreshDrawingCanvases() {
+  for (const p of renderedPages) {
+    const wrapper = document.getElementById(`page-wrap-${p}`);
+    if (wrapper) setupDrawingForPage(p, wrapper);
+  }
+}
+
+function attachSettingsEvents() {
+  document.getElementById('modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-overlay') store.setState({ settingsOpen: false });
+  });
+  document.getElementById('btn-close-settings')?.addEventListener('click', () => {
+    store.setState({ settingsOpen: false });
+  });
+  document.querySelectorAll('.theme-option[data-theme]').forEach(btn => {
+    btn.addEventListener('click', () => store.setTheme(btn.dataset.theme));
+  });
+  document.getElementById('toggle-scroll')?.addEventListener('click', () => {
+    store.setState({ continuousScroll: !store.getState().continuousScroll });
+    if (store.getState().view === 'reader') renderVisiblePages();
+  });
+  document.getElementById('toggle-annobar')?.addEventListener('click', () => {
+    store.setState({ showAnnotationBar: !store.getState().showAnnotationBar });
+  });
+  document.getElementById('toggle-ruler')?.addEventListener('click', () => {
+    store.setState({ showRuler: !store.getState().showRuler });
+  });
+}
+
+// ===== MOBILE: PINCH-TO-ZOOM =====
+function setupPinchZoom(el) {
+  if (!el) return;
+  let initialDistance = 0;
+  let initialZoom = 1;
+  let zoomTimeout;
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      initialDistance = Math.sqrt(
+        (e.touches[1].clientX - e.touches[0].clientX) ** 2 +
+        (e.touches[1].clientY - e.touches[0].clientY) ** 2
+      );
+      initialZoom = store.getState().zoom;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2) {
+      const dist = Math.sqrt(
+        (e.touches[1].clientX - e.touches[0].clientX) ** 2 +
+        (e.touches[1].clientY - e.touches[0].clientY) ** 2
+      );
+      const scale = dist / initialDistance;
+      const newZoom = Math.min(4, Math.max(0.3, initialZoom * scale));
+      store.setState({ zoom: newZoom });
+
+      // Update zoom display without full re-render
+      const zd = document.getElementById('zoom-display');
+      if (zd) zd.textContent = Math.round(newZoom * 100) + '%';
+      const zi = document.getElementById('zoom-info');
+      if (zi) zi.textContent = Math.round(newZoom * 100) + '%';
+
+      clearTimeout(zoomTimeout);
+      zoomTimeout = setTimeout(() => renderVisiblePages(), 200);
+    }
+  }, { passive: true });
+}
+
+// ===== MOBILE: SWIPE NAVIGATION =====
+function setupSwipeNavigation(el) {
+  if (!el) return;
+  let startX = 0;
+  let startY = 0;
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchend', (e) => {
+    if (store.getState().continuousScroll) return;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const dx = endX - startX;
+    const dy = endY - startY;
+
+    if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) goToPage(store.getState().currentPage + 1);
+      else goToPage(store.getState().currentPage - 1);
+    }
+  }, { passive: true });
+}
+
+// ===== NAVIGATION =====
+function goToPage(page) {
+  const state = store.getState();
+  page = Math.max(1, Math.min(page, state.totalPages));
+  if (page === state.currentPage && state.continuousScroll) {
+    const wrapper = document.getElementById(`page-wrap-${page}`);
+    if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  store.setState({ currentPage: page });
+
+  if (state.continuousScroll) {
+    const wrapper = document.getElementById(`page-wrap-${page}`);
+    if (wrapper) {
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      renderVisiblePagesLazy();
+    } else {
+      renderVisiblePages();
+    }
+  } else {
+    renderVisiblePages();
+  }
+  saveReadingProgress();
+  updateStatusBar(page);
+}
+
+function updateCurrentPageFromScroll() {
+  const container = document.getElementById('reading-canvas');
+  if (!container) return;
+
+  const scrollTop = container.scrollTop + container.clientHeight / 3;
+
+  for (const pos of pagePositions) {
+    if (pos.top + pos.height > scrollTop) {
+      if (pos.page !== store.getState().currentPage) {
+        store.setState({ currentPage: pos.page });
+        updateStatusBar(pos.page);
+      }
+      break;
+    }
+  }
+}
+
+function updateStatusBar(page) {
+  const state = store.getState();
+  const slider = document.getElementById('page-slider');
+  if (slider) slider.value = page;
+  const pageInfo = document.getElementById('page-info');
+  if (pageInfo) pageInfo.innerHTML = `Page <strong>${page}</strong> of ${state.totalPages}`;
+  const readPct = document.getElementById('read-pct');
+  if (readPct) readPct.textContent = `${Math.round((page / Math.max(state.totalPages, 1)) * 100)}% read`;
+}
+
+// ===== BOOKMARKS =====
+function toggleBookmark() {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+
+  const bookmarks = { ...state.bookmarks };
+  if (!bookmarks[docId]) bookmarks[docId] = [];
+
+  const idx = bookmarks[docId].indexOf(state.currentPage);
+  if (idx >= 0) {
+    bookmarks[docId].splice(idx, 1);
+    showToast('Bookmark removed');
+  } else {
+    bookmarks[docId].push(state.currentPage);
+    bookmarks[docId].sort((a, b) => a - b);
+    showToast(`Page ${state.currentPage} bookmarked`);
+  }
+
+  store.setState({ bookmarks });
+  store.persistBookmarks();
+
+  // Update bookmark icon without full re-render
+  const btn = document.getElementById('btn-bookmark');
+  if (btn) {
+    const isNowBookmarked = bookmarks[docId]?.includes(state.currentPage);
+    btn.innerHTML = isNowBookmarked ? Icons.bookmarkFill : Icons.bookmark;
+  }
+}
+
+function removeBookmark(page) {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const bookmarks = { ...state.bookmarks };
+  if (bookmarks[docId]) {
+    bookmarks[docId] = bookmarks[docId].filter(p => p !== page);
+  }
+  store.setState({ bookmarks });
+  store.persistBookmarks();
+  showToast('Bookmark removed');
+}
+
+// ===== ANNOTATIONS =====
+function toggleAnnotationMode(mode) {
+  const current = store.getState().annotationMode;
+  store.setState({ annotationMode: current === mode ? null : mode });
+}
+
+function addAnnotation(type, page, data) {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const annotations = { ...state.annotations };
+  if (!annotations[docId]) annotations[docId] = [];
+  annotations[docId].push({
+    id: generateId(), type, page,
+    color: state.highlightColor,
+    created: Date.now(),
+    ...data
+  });
+  store.setState({ annotations, undoStack: [] }); // Clear redo on new annotation
+  store.persistAnnotations();
+}
+
+function undoAnnotation() {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const annotations = { ...state.annotations };
+  const undoStack = [...(state.undoStack || [])];
+  if (annotations[docId]?.length > 0) {
+    const removed = annotations[docId].pop();
+    undoStack.push(removed);
+    store.setState({ annotations, undoStack });
+    store.persistAnnotations();
+    showToast('Annotation undone');
+    // Refresh highlights on the affected page
+    const wrapper = document.getElementById(`page-wrap-${removed.page}`);
+    if (wrapper) {
+      renderHighlightsForPage(removed.page, wrapper);
+      renderFreehandForPage(removed.page, wrapper);
+    }
+  }
+}
+
+function redoAnnotation() {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const undoStack = [...(state.undoStack || [])];
+  if (undoStack.length === 0) return;
+  const annotations = { ...state.annotations };
+  if (!annotations[docId]) annotations[docId] = [];
+  const restored = undoStack.pop();
+  annotations[docId].push(restored);
+  store.setState({ annotations, undoStack });
+  store.persistAnnotations();
+  showToast('Annotation restored');
+  const wrapper = document.getElementById(`page-wrap-${restored.page}`);
+  if (wrapper) {
+    renderHighlightsForPage(restored.page, wrapper);
+    renderFreehandForPage(restored.page, wrapper);
+  }
+}
+
+// ===== READING PROGRESS =====
+function saveReadingProgress() {
+  const state = store.getState();
+  if (!state.currentDoc) return;
+  const progress = state.currentPage / Math.max(state.totalPages, 1);
+  const docs = state.documents.map(d =>
+    d.id === state.currentDoc.id
+      ? { ...d, lastPage: state.currentPage, progress, lastOpened: Date.now() }
+      : d
+  );
+  store.setState({
+    documents: docs,
+    currentDoc: { ...state.currentDoc, lastPage: state.currentPage, progress }
+  });
+  store.persistDocs();
+}
+
+// ===== KEYBOARD SHORTCUTS =====
+function handleKeyboard(e) {
+  const state = store.getState();
+  if (state.view !== 'reader') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch (e.key) {
+    case 'ArrowRight': case 'ArrowDown':
+      if (!state.continuousScroll) { e.preventDefault(); goToPage(state.currentPage + 1); }
+      break;
+    case 'ArrowLeft': case 'ArrowUp':
+      if (!state.continuousScroll) { e.preventDefault(); goToPage(state.currentPage - 1); }
+      break;
+    case 'Home': e.preventDefault(); goToPage(1); break;
+    case 'End': e.preventDefault(); goToPage(state.totalPages); break;
+    case 'f':
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); store.setState({ searchOpen: true }); }
+      break;
+    case 'b':
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleBookmark(); }
+      break;
+    case 'Escape':
+      if (state.searchOpen) store.setState({ searchOpen: false });
+      else if (state.settingsOpen) store.setState({ settingsOpen: false });
+      else if (state.focusMode) store.setState({ focusMode: false });
+      else if (state.annotationMode) store.setState({ annotationMode: null });
+      break;
+    case '+': case '=':
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        store.setState({ zoom: Math.min(state.zoom + 0.15, 4) });
+        renderVisiblePages();
+      }
+      break;
+    case '-':
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        store.setState({ zoom: Math.max(state.zoom - 0.15, 0.3) });
+        renderVisiblePages();
+      }
+      break;
+  }
+}
+
+// ===== SMART STATE SUBSCRIBER =====
+store.subscribe((state, prev) => {
+  // Full re-render only on view transitions
+  if (state.view !== currentView) {
+    currentView = state.view;
+    renderApp();
+    return;
+  }
+
+  if (state.view === 'library') {
+    // Library: only full re-render for structural changes
+    if (state.documents !== prev.documents || state.isDragging !== prev.isDragging) {
+      renderApp();
+      return;
+    }
+    // Settings modal toggle
+    if (state.settingsOpen !== prev.settingsOpen) {
+      renderApp();
+      return;
+    }
+    // Toast
+    if (state.toast !== prev.toast) {
+      const existingToast = document.querySelector('.toast');
+      if (existingToast) existingToast.remove();
+      if (state.toast) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.setAttribute('role', 'status');
+        t.textContent = state.toast;
+        document.querySelector('.app-shell')?.appendChild(t);
+      }
+    }
+    return;
+  }
+
+  // Reader: targeted updates
+  if (state.view === 'reader') {
+    // Loading state changed — swap spinner ↔ page container
+    if (state.loading !== prev.loading) {
+      renderApp();
+      return;
+    }
+
+    // Loading progress — update the bar width directly
+    if (state.loadProgress !== prev.loadProgress && state.loading) {
+      const bar = document.querySelector('.load-progress-bar');
+      if (bar) bar.style.width = (state.loadProgress || 5) + '%';
+      return;
+    }
+
+    // Settings / search modals — full re-render
+    if (state.settingsOpen !== prev.settingsOpen ||
+        state.searchOpen !== prev.searchOpen ||
+        state.sidePanel !== prev.sidePanel ||
+        state.sidePanelTab !== prev.sidePanelTab ||
+        state.showAnnotationBar !== prev.showAnnotationBar ||
+        state.showRuler !== prev.showRuler) {
+      renderApp();
+      return;
+    }
+
+    // Focus mode toggle
+    if (state.focusMode !== prev.focusMode) {
+      const shell = document.querySelector('.app-shell');
+      if (shell) shell.classList.toggle('focus-mode', state.focusMode);
+    }
+
+    // Zoom display
+    if (state.zoom !== prev.zoom) {
+      const zd = document.getElementById('zoom-display');
+      if (zd) zd.textContent = Math.round(state.zoom * 100) + '%';
+      const zi = document.getElementById('zoom-info');
+      if (zi) zi.textContent = Math.round(state.zoom * 100) + '%';
+    }
+
+    // Annotation mode toggle — update toolbar button active states
+    if (state.annotationMode !== prev.annotationMode) {
+      ['highlight', 'underline', 'note', 'pen'].forEach(m => {
+        const btn = document.getElementById(`btn-anno-${m}`);
+        if (btn) btn.classList.toggle('active', state.annotationMode === m);
+      });
+    }
+
+    // Highlight color
+    if (state.highlightColor !== prev.highlightColor) {
+      document.querySelectorAll('[data-color]').forEach(btn => {
+        const dot = btn.querySelector('.color-dot');
+        if (dot) {
+          dot.classList.toggle('active', btn.dataset.color === state.highlightColor);
+          dot.style.borderColor = btn.dataset.color === state.highlightColor ? 'var(--text-primary)' : 'transparent';
+        }
+      });
+    }
+
+    // Toast
+    if (state.toast !== prev.toast) {
+      const existingToast = document.querySelector('.toast');
+      if (existingToast) existingToast.remove();
+      if (state.toast) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.setAttribute('role', 'status');
+        t.textContent = state.toast;
+        document.querySelector('.app-shell')?.appendChild(t);
+      }
+    }
+  }
+});
+
+// ===== INITIALIZE =====
+setupTextSelectionHandler();
+
+window.addEventListener('pdf-loaded', () => {
+  renderVisiblePages(true);
+  if (store.getState().sidePanel && store.getState().sidePanelTab === 'thumbnails') {
+    setTimeout(renderThumbnails, 300);
+  }
+});
+
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    if (store.getState().view === 'reader' && store.getState().pdfDoc) {
+      renderVisiblePages();
+    }
+  }, 250);
+});
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker?.addEventListener('statechange', () => {
+          if (newWorker.state === 'activated') {
+            showToast('App updated! Refresh for the latest version.');
+          }
+        });
+      });
+    }).catch(() => {});
+  });
+}
+
+// Capacitor back button
+if (window.Capacitor?.Plugins?.App) {
+  window.Capacitor.Plugins.App.addListener('backButton', () => {
+    const state = store.getState();
+    if (state.settingsOpen) store.setState({ settingsOpen: false });
+    else if (state.searchOpen) store.setState({ searchOpen: false });
+    else if (state.view === 'reader') {
+      saveReadingProgress();
+      store.setState({ view: 'library', sidePanel: false, searchOpen: false, focusMode: false });
+    } else {
+      window.Capacitor.Plugins.App.exitApp();
+    }
+  });
+}
+
+// Initial render
+renderApp();
+</script>
+</body>
+</html>

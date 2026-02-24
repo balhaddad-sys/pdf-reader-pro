@@ -1,0 +1,24 @@
+{
+  "name": "pdf-reader-pro",
+  "version": "1.0.0",
+  "description": "The most natural way to read, annotate, and study PDFs",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve public",
+    "icons": "node scripts/generate-icons.js",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^5.7.0",
+    "@capacitor/app": "^5.0.0",
+    "@capacitor/cli": "^5.7.0",
+    "@capacitor/core": "^5.7.0",
+    "@capacitor/filesystem": "^5.2.0",
+    "@capacitor/splash-screen": "^5.0.0",
+    "@capacitor/status-bar": "^5.0.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.0"
+  }
+}

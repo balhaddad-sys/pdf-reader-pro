@@ -805,6 +805,9 @@ button:focus-visible {
   bottom: 0;
   overflow: hidden;
   line-height: 1;
+  -webkit-touch-callout: none;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .text-layer span {
@@ -3128,9 +3131,11 @@ function setupLongPressHandler() {
 
   function handlePressEnd() { clearPress(); }
 
-  // Suppress native context menu after our long press
+  // Always suppress native context menu on text layer (we have our own toolbar)
   document.addEventListener('contextmenu', (e) => {
-    if (longPressFired) { e.preventDefault(); longPressFired = false; }
+    if (e.target.closest('.text-layer') || e.target.closest('.page-wrapper') || e.target.closest('.reading-canvas')) {
+      e.preventDefault();
+    }
   });
 
   document.addEventListener('touchstart', handlePressStart, { passive: true });

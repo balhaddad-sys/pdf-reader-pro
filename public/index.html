@@ -875,6 +875,38 @@ button:focus-visible {
 .reading-canvas.note-mode { cursor: crosshair; }
 .reading-canvas.note-mode .page-wrapper { cursor: crosshair; }
 
+/* Long-press context toolbar */
+.selection-toolbar {
+  position: fixed;
+  z-index: 9998;
+  display: flex;
+  gap: 2px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  animation: scaleIn 0.15s cubic-bezier(0.2,0,0,1);
+}
+.selection-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.15s;
+}
+.selection-toolbar button:hover { background: var(--bg-secondary); }
+.selection-toolbar button:active { background: var(--bg-tertiary); }
+.selection-toolbar button svg { flex-shrink: 0; }
+
 /* Status Bar */
 .reader-statusbar {
   height: var(--statusbar-height);
@@ -2982,7 +3014,9 @@ function setupTextSelectionHandler() {
   document.addEventListener('mouseup', (e) => {
     const state = store.getState();
     if (state.view !== 'reader') return;
-    if (!state.annotationMode || state.annotationMode === 'pen') return;
+
+    // Don't handle if pen mode is active
+    if (state.annotationMode === 'pen') return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
@@ -3012,19 +3046,27 @@ function setupTextSelectionHandler() {
 
     if (relativeRects.length === 0) return;
 
+    // If an annotation mode is active, apply it directly (original behavior)
     if (state.annotationMode === 'highlight' || state.annotationMode === 'underline') {
       addAnnotation(state.annotationMode, pageNum, { text: selectedText, rects: relativeRects });
       renderHighlightsForPage(pageNum, pageWrapper);
       showToast('Annotation added');
+      selection.removeAllRanges();
     } else if (state.annotationMode === 'note') {
       showNoteDialog(selectedText, (noteText) => {
         addAnnotation('note', pageNum, { text: selectedText, content: noteText, rects: relativeRects });
         renderHighlightsForPage(pageNum, pageWrapper);
         showToast('Note saved');
       });
+      selection.removeAllRanges();
+    } else {
+      // No mode active — show the floating toolbar so the user can choose
+      // (Don't show if toolbar already visible from long-press)
+      if (!document.getElementById('selection-toolbar')) {
+        const lastRect = rects[rects.length - 1];
+        showSelectionToolbar(lastRect.right, lastRect.top);
+      }
     }
-
-    selection.removeAllRanges();
   });
 }
 
@@ -3061,6 +3103,266 @@ function setupTapToNote() {
       showToast('Note added');
     });
   });
+}
+
+// ===== LONG-PRESS TO SELECT SENTENCE & SHOW TOOLBAR =====
+function setupLongPressHandler() {
+  let pressTimer = null;
+  let pressTarget = null;
+  let pressX = 0;
+  let pressY = 0;
+  let moved = false;
+  const LONG_PRESS_MS = 500;
+  const MOVE_THRESHOLD = 10;
+
+  function clearPress() {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    pressTarget = null;
+  }
+
+  function handlePressStart(e) {
+    const state = store.getState();
+    if (state.view !== 'reader') return;
+    // Don't interfere with pen drawing mode
+    if (state.annotationMode === 'pen') return;
+
+    const touch = e.touches ? e.touches[0] : e;
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!target) return;
+
+    // Only trigger on text layer spans or the text layer itself
+    const textSpan = target.closest('.text-layer span') || (target.closest('.text-layer') ? target : null);
+    if (!textSpan) return;
+
+    pressX = touch.clientX;
+    pressY = touch.clientY;
+    pressTarget = textSpan;
+    moved = false;
+
+    pressTimer = setTimeout(() => {
+      if (moved) return;
+      // Prevent default text selection on touch
+      if (e.cancelable && e.type === 'touchstart') {
+        e.preventDefault();
+      }
+
+      // Select the sentence at the press point
+      const selectedText = selectSentenceAt(touch.clientX, touch.clientY);
+      if (selectedText) {
+        // Brief haptic feedback if available
+        if (navigator.vibrate) navigator.vibrate(30);
+        showSelectionToolbar(touch.clientX, touch.clientY);
+      }
+    }, LONG_PRESS_MS);
+  }
+
+  function handlePressMove(e) {
+    if (!pressTimer) return;
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = touch.clientX - pressX;
+    const dy = touch.clientY - pressY;
+    if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
+      moved = true;
+      clearPress();
+    }
+  }
+
+  function handlePressEnd() {
+    clearPress();
+  }
+
+  // Touch events
+  document.addEventListener('touchstart', handlePressStart, { passive: false });
+  document.addEventListener('touchmove', handlePressMove, { passive: true });
+  document.addEventListener('touchend', handlePressEnd);
+  document.addEventListener('touchcancel', handlePressEnd);
+
+  // Mouse events (right-click-hold or just long left-click)
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // left button only
+    handlePressStart(e);
+  });
+  document.addEventListener('mousemove', handlePressMove);
+  document.addEventListener('mouseup', handlePressEnd);
+}
+
+// Select the sentence around the character at (x, y)
+function selectSentenceAt(x, y) {
+  // Use caretPositionFromPoint or caretRangeFromPoint
+  let range;
+  if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(x, y);
+  } else if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  }
+
+  if (!range) return null;
+  const node = range.startContainer;
+  if (node.nodeType !== Node.TEXT_NODE) return null;
+
+  const textLayer = node.parentElement?.closest('.text-layer');
+  if (!textLayer) return null;
+
+  const text = node.textContent;
+  const offset = range.startOffset;
+
+  // Expand selection to sentence boundaries
+  // Sentence ends at . ? ! or at the text node boundary
+  let start = 0;
+  let end = text.length;
+
+  // Walk backward to find sentence start
+  for (let i = offset - 1; i >= 0; i--) {
+    if ('.!?\n'.includes(text[i]) && i < offset - 1) {
+      start = i + 1;
+      break;
+    }
+  }
+  // Walk forward to find sentence end
+  for (let i = offset; i < text.length; i++) {
+    if ('.!?\n'.includes(text[i])) {
+      end = i + 1;
+      break;
+    }
+  }
+
+  // Trim whitespace from boundaries
+  while (start < end && text[start] === ' ') start++;
+
+  if (start >= end) return null;
+
+  // Create and apply the selection
+  const selRange = document.createRange();
+  selRange.setStart(node, start);
+  selRange.setEnd(node, end);
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(selRange);
+
+  return selection.toString().trim();
+}
+
+// Show floating toolbar near the selection
+function showSelectionToolbar(x, y) {
+  // Remove any existing toolbar
+  dismissSelectionToolbar();
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return;
+
+  const selectedText = selection.toString().trim();
+  if (!selectedText) return;
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'selection-toolbar';
+  toolbar.id = 'selection-toolbar';
+
+  toolbar.innerHTML = `
+    <button data-action="highlight" aria-label="Highlight">${Icons.highlight} Highlight</button>
+    <button data-action="underline" aria-label="Underline" style="text-decoration:underline">U̲nderline</button>
+    <button data-action="note" aria-label="Add note">${Icons.note} Note</button>
+    <button data-action="copy" aria-label="Copy text">${Icons.copy} Copy</button>
+  `;
+
+  document.body.appendChild(toolbar);
+
+  // Position above the press point, centered
+  const tw = toolbar.offsetWidth;
+  const th = toolbar.offsetHeight;
+  let left = x - tw / 2;
+  let top = y - th - 12;
+
+  // Keep within viewport
+  left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+  if (top < 8) top = y + 20; // flip below if too close to top
+
+  toolbar.style.left = left + 'px';
+  toolbar.style.top = top + 'px';
+
+  // Handle actions
+  toolbar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    handleSelectionAction(action, selection);
+  });
+
+  // Dismiss on click outside after a short delay
+  setTimeout(() => {
+    document.addEventListener('click', _dismissOnOutsideClick);
+    document.addEventListener('touchstart', _dismissOnOutsideClick);
+    document.addEventListener('scroll', dismissSelectionToolbar, { once: true, capture: true });
+  }, 50);
+}
+
+function _dismissOnOutsideClick(e) {
+  const toolbar = document.getElementById('selection-toolbar');
+  if (toolbar && !toolbar.contains(e.target)) {
+    dismissSelectionToolbar();
+  }
+}
+
+function dismissSelectionToolbar() {
+  const toolbar = document.getElementById('selection-toolbar');
+  if (toolbar) toolbar.remove();
+  document.removeEventListener('click', _dismissOnOutsideClick);
+  document.removeEventListener('touchstart', _dismissOnOutsideClick);
+}
+
+function handleSelectionAction(action, selection) {
+  if (!selection || selection.isCollapsed) { dismissSelectionToolbar(); return; }
+
+  const selectedText = selection.toString().trim();
+  if (!selectedText) { dismissSelectionToolbar(); return; }
+
+  const range = selection.getRangeAt(0);
+  const textLayer = range.startContainer.parentElement?.closest('.text-layer');
+  const pageWrapper = textLayer?.closest('.page-wrapper');
+  if (!pageWrapper) { dismissSelectionToolbar(); return; }
+
+  const pageNum = parseInt(pageWrapper.dataset.page);
+  if (!pageNum) { dismissSelectionToolbar(); return; }
+
+  const rects = Array.from(range.getClientRects());
+  const wrapperRect = pageWrapper.getBoundingClientRect();
+  const wW = wrapperRect.width;
+  const wH = wrapperRect.height;
+  const relativeRects = rects.filter(r => r.width > 0 && r.height > 0).map(r => ({
+    xPct: (r.left - wrapperRect.left) / wW,
+    yPct: (r.top - wrapperRect.top) / wH,
+    widthPct: r.width / wW,
+    heightPct: r.height / wH,
+  }));
+
+  if (relativeRects.length === 0) { dismissSelectionToolbar(); return; }
+
+  dismissSelectionToolbar();
+
+  if (action === 'highlight') {
+    addAnnotation('highlight', pageNum, { text: selectedText, rects: relativeRects });
+    renderHighlightsForPage(pageNum, pageWrapper);
+    showToast('Highlighted');
+  } else if (action === 'underline') {
+    addAnnotation('underline', pageNum, { text: selectedText, rects: relativeRects });
+    renderHighlightsForPage(pageNum, pageWrapper);
+    showToast('Underlined');
+  } else if (action === 'note') {
+    showNoteDialog(selectedText, (noteText) => {
+      addAnnotation('note', pageNum, { text: selectedText, content: noteText, rects: relativeRects });
+      renderHighlightsForPage(pageNum, pageWrapper);
+      showToast('Note saved');
+    });
+  } else if (action === 'copy') {
+    navigator.clipboard?.writeText(selectedText).then(() => showToast('Copied'));
+  }
+
+  selection.removeAllRanges();
 }
 
 // ===== FREEHAND DRAWING =====
@@ -3912,6 +4214,7 @@ store.subscribe((state, prev) => {
 // ===== INITIALIZE =====
 setupTextSelectionHandler();
 setupTapToNote();
+setupLongPressHandler();
 
 window.addEventListener('pdf-loaded', () => {
   renderVisiblePages(true);

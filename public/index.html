@@ -753,6 +753,9 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
+  overscroll-behavior-y: contain;
 }
 [data-theme="dark"] .reading-canvas { background: #3c3f41; }
 [data-theme="sepia"] .reading-canvas { background: #6b5c45; }
@@ -985,8 +988,8 @@ button:focus-visible {
 .status-left, .status-right { display: flex; align-items: center; gap: 8px; }
 
 .status-nav-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -995,6 +998,7 @@ button:focus-visible {
   transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .status-nav-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
 .status-nav-btn:active { background: var(--bg-tertiary); transform: scale(0.88); }
@@ -1008,10 +1012,13 @@ button:focus-visible {
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
   transition: background var(--transition-fast);
   user-select: none;
+  min-height: 32px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .page-jump-display:hover { background: var(--bg-secondary); color: var(--text-primary); }
 
@@ -1658,13 +1665,15 @@ button:focus-visible {
     right: 16px;
   }
 
-  /* Status bar */
+  /* Status bar — taller on mobile for touch targets */
   .reader-statusbar {
+    height: 44px;
     padding: 0 12px;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     font-size: 10px;
   }
   .status-left, .status-right { gap: 6px; }
+  .status-nav-btn { width: 36px; height: 36px; }
   .page-slider { width: 80px; }
 
   /* Modal: bottom sheet style on mobile */
@@ -1681,7 +1690,7 @@ button:focus-visible {
 /* Extra small screens (phones in portrait) */
 @media (max-width: 420px) {
   .reader-topbar { gap: 0; padding: env(safe-area-inset-top, 0px) 2px 0 2px; }
-  .topbar-btn { min-width: 36px; min-height: 36px; width: 36px; height: 36px; }
+  .topbar-btn { min-width: 38px; min-height: 38px; width: 38px; height: 38px; }
   .topbar-sep { display: none; }
   .topbar-title { font-size: 12px; }
   .page-container { padding: 4px; gap: 8px; }
@@ -1692,6 +1701,21 @@ button:focus-visible {
   .page-slider-wrap { display: none; }
   .doc-card-thumb { height: 140px; }
   .library-title { font-size: 20px; }
+  /* Slightly larger status nav buttons on small phones */
+  .status-nav-btn { width: 36px; height: 36px; }
+  /* Hide read% text to save status bar space */
+  #read-pct { display: none; }
+  .status-divider:last-of-type { display: none; }
+}
+
+/* Very small phones (iPhone SE 1st gen, budget Android) */
+@media (max-width: 320px) {
+  .topbar-btn { min-width: 34px; min-height: 34px; width: 34px; height: 34px; }
+  .topbar-title { display: none; } /* hide title to save space on 320px */
+  .reader-statusbar { padding: 0 6px; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .page-jump-display { font-size: 10px; padding: 2px 4px; }
+  .status-nav-btn { width: 30px; height: 30px; }
+  .lib-btn { padding: 10px 12px; font-size: 12px; }
 }
 
 /* Print */
@@ -2023,15 +2047,53 @@ button:focus-visible {
 /* ===== RESPONSIVE ANNO BAR ===== */
 @media (max-width: 768px) {
   .anno-bar { padding: 6px 8px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
-  .anno-bar-btn { width: 38px; height: 34px; }
+  .anno-bar-btn { width: 38px; height: 38px; }
   .anno-bar-sep { margin: 0 4px; }
   .color-swatch { width: 18px; height: 18px; }
 }
-@media (max-width: 420px) {
-  .anno-bar-sep { margin: 0 2px; }
-  .anno-bar-btn { width: 34px; height: 32px; }
-  .anno-bar-colors { gap: 4px; }
-  .color-swatch { width: 16px; height: 16px; }
+
+/* Mobile two-row anno-bar: tools on top, colors below */
+@media (max-width: 600px) {
+  .anno-bar {
+    padding: 7px 12px;
+    padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+  }
+  .anno-bar-tools {
+    flex-wrap: wrap;
+    max-width: 100%;
+    gap: 0;
+    row-gap: 0;
+    justify-content: space-around;
+  }
+  /* Hide the separators — layout handled by two-row design */
+  .anno-bar-sep { display: none; }
+  /* Colors become their own full-width row below the tools */
+  .anno-bar-colors {
+    flex: 0 0 100%;
+    justify-content: center;
+    gap: 12px;
+    order: 10;
+    padding-top: 7px;
+    margin-top: 5px;
+    border-top: 1px solid var(--border-strong);
+  }
+  .color-swatch { width: 22px; height: 22px; }
+  /* Undo stays in the tools row (right side) */
+  #bar-btn-undo { order: 9; margin-left: auto; }
+  .anno-bar-btn { width: 40px; height: 40px; flex-shrink: 0; }
+}
+
+@media (max-width: 380px) {
+  .anno-bar-tools { justify-content: center; gap: 2px; }
+  .anno-bar-btn { width: 36px; height: 36px; }
+  #bar-btn-undo { margin-left: 4px; }
+}
+
+/* 320px — very small phones */
+@media (max-width: 340px) {
+  .anno-bar-btn { width: 32px; height: 32px; font-size: 12px; }
+  .color-swatch { width: 20px; height: 20px; }
+  .anno-bar-colors { gap: 8px; }
 }
 
 /* ===== ACCESSIBILITY ===== */

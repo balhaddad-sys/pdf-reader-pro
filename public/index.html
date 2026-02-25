@@ -3108,50 +3108,51 @@ function setupTapToNote() {
 // ===== LONG-PRESS TO SELECT SENTENCE & SHOW TOOLBAR =====
 function setupLongPressHandler() {
   let pressTimer = null;
-  let pressTarget = null;
   let pressX = 0;
   let pressY = 0;
   let moved = false;
+  let longPressFired = false;
   const LONG_PRESS_MS = 500;
   const MOVE_THRESHOLD = 10;
 
   function clearPress() {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    pressTarget = null;
   }
 
   function handlePressStart(e) {
     const state = store.getState();
     if (state.view !== 'reader') return;
-    // Don't interfere with pen drawing mode
     if (state.annotationMode === 'pen') return;
 
     const touch = e.touches ? e.touches[0] : e;
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
     if (!target) return;
 
-    // Only trigger on text layer spans or the text layer itself
-    const textSpan = target.closest('.text-layer span') || (target.closest('.text-layer') ? target : null);
-    if (!textSpan) return;
+    // Only trigger on text layer content
+    if (!target.closest('.text-layer')) return;
 
     pressX = touch.clientX;
     pressY = touch.clientY;
-    pressTarget = textSpan;
     moved = false;
+    longPressFired = false;
 
     pressTimer = setTimeout(() => {
       if (moved) return;
-      // Prevent default text selection on touch
-      if (e.cancelable && e.type === 'touchstart') {
-        e.preventDefault();
-      }
+      longPressFired = true;
 
-      // Select the sentence at the press point
+      // Select the sentence across PDF text spans
       const selectedText = selectSentenceAt(touch.clientX, touch.clientY);
       if (selectedText) {
-        // Brief haptic feedback if available
         if (navigator.vibrate) navigator.vibrate(30);
-        showSelectionToolbar(touch.clientX, touch.clientY);
+        // Position toolbar above the selection
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+          const rects = sel.getRangeAt(0).getClientRects();
+          const firstRect = rects[0];
+          if (firstRect) {
+            showSelectionToolbar(firstRect.left + firstRect.width / 2, firstRect.top);
+          }
+        }
       }
     }, LONG_PRESS_MS);
   }
@@ -3171,75 +3172,125 @@ function setupLongPressHandler() {
     clearPress();
   }
 
+  // Suppress native context menu on long press in text layer
+  document.addEventListener('contextmenu', (e) => {
+    if (longPressFired && e.target.closest('.text-layer')) {
+      e.preventDefault();
+    }
+  });
+
   // Touch events
-  document.addEventListener('touchstart', handlePressStart, { passive: false });
+  document.addEventListener('touchstart', handlePressStart, { passive: true });
   document.addEventListener('touchmove', handlePressMove, { passive: true });
   document.addEventListener('touchend', handlePressEnd);
   document.addEventListener('touchcancel', handlePressEnd);
 
-  // Mouse events (right-click-hold or just long left-click)
+  // Mouse long-press
   document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return; // left button only
+    if (e.button !== 0) return;
     handlePressStart(e);
   });
   document.addEventListener('mousemove', handlePressMove);
   document.addEventListener('mouseup', handlePressEnd);
 }
 
-// Select the sentence around the character at (x, y)
+// Select the sentence at (x,y), expanding across multiple PDF text spans
 function selectSentenceAt(x, y) {
-  // Use caretPositionFromPoint or caretRangeFromPoint
-  let range;
+  // Find the text node at the point
+  let caretRange;
   if (document.caretRangeFromPoint) {
-    range = document.caretRangeFromPoint(x, y);
+    caretRange = document.caretRangeFromPoint(x, y);
   } else if (document.caretPositionFromPoint) {
     const pos = document.caretPositionFromPoint(x, y);
     if (pos) {
-      range = document.createRange();
-      range.setStart(pos.offsetNode, pos.offset);
-      range.collapse(true);
+      caretRange = document.createRange();
+      caretRange.setStart(pos.offsetNode, pos.offset);
+      caretRange.collapse(true);
     }
   }
+  if (!caretRange) return null;
 
-  if (!range) return null;
-  const node = range.startContainer;
+  const node = caretRange.startContainer;
   if (node.nodeType !== Node.TEXT_NODE) return null;
 
-  const textLayer = node.parentElement?.closest('.text-layer');
+  const hitSpan = node.parentElement;
+  if (!hitSpan) return null;
+
+  const textLayer = hitSpan.closest('.text-layer');
   if (!textLayer) return null;
 
-  const text = node.textContent;
-  const offset = range.startOffset;
+  // Get all text spans in this text layer, sorted by vertical then horizontal position
+  const allSpans = Array.from(textLayer.querySelectorAll('span')).filter(s => s.textContent.trim());
+  if (allSpans.length === 0) return null;
 
-  // Expand selection to sentence boundaries
-  // Sentence ends at . ? ! or at the text node boundary
-  let start = 0;
-  let end = text.length;
+  const hitIndex = allSpans.indexOf(hitSpan);
+  if (hitIndex === -1) return null;
 
-  // Walk backward to find sentence start
-  for (let i = offset - 1; i >= 0; i--) {
-    if ('.!?\n'.includes(text[i]) && i < offset - 1) {
-      start = i + 1;
+  // Find spans on the same line (similar vertical position, within 5px)
+  const hitRect = hitSpan.getBoundingClientRect();
+  const hitY = hitRect.top + hitRect.height / 2;
+  const LINE_TOLERANCE = Math.max(hitRect.height * 0.6, 5);
+
+  // Collect spans on the same line
+  let lineStart = hitIndex;
+  let lineEnd = hitIndex;
+
+  // Walk backward to find line start
+  for (let i = hitIndex - 1; i >= 0; i--) {
+    const r = allSpans[i].getBoundingClientRect();
+    const spanY = r.top + r.height / 2;
+    if (Math.abs(spanY - hitY) <= LINE_TOLERANCE) {
+      lineStart = i;
+    } else {
       break;
     }
   }
-  // Walk forward to find sentence end
-  for (let i = offset; i < text.length; i++) {
-    if ('.!?\n'.includes(text[i])) {
-      end = i + 1;
+
+  // Walk forward to find line end
+  for (let i = hitIndex + 1; i < allSpans.length; i++) {
+    const r = allSpans[i].getBoundingClientRect();
+    const spanY = r.top + r.height / 2;
+    if (Math.abs(spanY - hitY) <= LINE_TOLERANCE) {
+      lineEnd = i;
+    } else {
       break;
     }
   }
 
-  // Trim whitespace from boundaries
-  while (start < end && text[start] === ' ') start++;
+  // Now expand beyond the line to sentence boundaries
+  // Walk backward from lineStart to find sentence start (. ! ?)
+  let sentStart = lineStart;
+  for (let i = lineStart - 1; i >= 0; i--) {
+    const txt = allSpans[i].textContent;
+    if (/[.!?]\s*$/.test(txt)) break; // previous span ends a sentence
+    sentStart = i;
+    // Don't cross more than 2 lines back
+    const r = allSpans[i].getBoundingClientRect();
+    if (Math.abs((r.top + r.height / 2) - hitY) > LINE_TOLERANCE * 4) break;
+  }
 
-  if (start >= end) return null;
+  // Walk forward from lineEnd to find sentence end (. ! ?)
+  let sentEnd = lineEnd;
+  for (let i = lineEnd; i < allSpans.length; i++) {
+    const txt = allSpans[i].textContent;
+    sentEnd = i;
+    if (/[.!?]\s*$/.test(txt)) break; // this span ends the sentence
+    // Don't cross more than 2 lines forward
+    const r = allSpans[i].getBoundingClientRect();
+    if (Math.abs((r.top + r.height / 2) - hitY) > LINE_TOLERANCE * 4) break;
+  }
 
-  // Create and apply the selection
+  // Create selection range spanning from first span to last span
+  const startSpan = allSpans[sentStart];
+  const endSpan = allSpans[sentEnd];
+  const startNode = startSpan.firstChild;
+  const endNode = endSpan.firstChild;
+
+  if (!startNode || !endNode) return null;
+
   const selRange = document.createRange();
-  selRange.setStart(node, start);
-  selRange.setEnd(node, end);
+  selRange.setStart(startNode, 0);
+  selRange.setEnd(endNode, endNode.textContent.length);
 
   const selection = window.getSelection();
   selection.removeAllRanges();

@@ -805,6 +805,7 @@ button:focus-visible {
   bottom: 0;
   overflow: hidden;
   line-height: 1;
+  z-index: 2;
   -webkit-touch-callout: none;
   -webkit-user-select: text;
   user-select: text;
@@ -815,6 +816,7 @@ button:focus-visible {
   white-space: pre;
   transform-origin: 0% 0%;
   color: transparent;
+  padding: 1px 0;
 }
 
 .text-layer span::selection {
@@ -3095,11 +3097,17 @@ function setupLongPressHandler() {
     const state = store.getState();
     if (state.view !== 'reader') return;
     if (state.annotationMode === 'pen') return;
-    if (e.target.closest('.selection-toolbar, .anno-menu, .anno-fab, .note-popover, .note-pin, .reader-topbar, .reader-statusbar, .side-panel')) return;
 
     const touch = e.touches ? e.touches[0] : e;
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (!target || !target.closest('.text-layer')) return;
+    if (!target) return;
+
+    // Must be inside a page wrapper (text layer, canvas, or the wrapper itself)
+    const pageWrapper = target.closest('.page-wrapper');
+    if (!pageWrapper) return;
+
+    // Skip UI elements
+    if (target.closest('.selection-toolbar, .anno-menu, .anno-fab, .note-popover, .note-pin, .reader-topbar, .reader-statusbar, .side-panel')) return;
 
     pressX = touch.clientX;
     pressY = touch.clientY;
@@ -3149,11 +3157,36 @@ function setupLongPressHandler() {
 
 // Select the visual line of text at the given point
 function selectLineAt(x, y) {
-  // Find the span at the press point
-  const target = document.elementFromPoint(x, y);
-  if (!target) return null;
+  // Find the nearest text using caretRangeFromPoint (works even when touch
+  // hits the canvas underneath, not the transparent text span directly)
+  let hitSpan = null;
 
-  const hitSpan = target.closest('.text-layer span');
+  // Method 1: caretRangeFromPoint (Chrome, Safari)
+  if (document.caretRangeFromPoint) {
+    const caret = document.caretRangeFromPoint(x, y);
+    if (caret && caret.startContainer) {
+      const node = caret.startContainer;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  // Method 2: caretPositionFromPoint (Firefox)
+  if (!hitSpan && document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode) {
+      const node = pos.offsetNode;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  // Method 3: elementFromPoint fallback
+  if (!hitSpan) {
+    const target = document.elementFromPoint(x, y);
+    if (target) hitSpan = target.closest('.text-layer span');
+  }
+
   if (!hitSpan) return null;
 
   const textLayer = hitSpan.closest('.text-layer');
@@ -3162,7 +3195,7 @@ function selectLineAt(x, y) {
   // Get the hit span's vertical center
   const hitRect = hitSpan.getBoundingClientRect();
   const hitYCenter = hitRect.top + hitRect.height / 2;
-  const tolerance = hitRect.height * 0.6;
+  const tolerance = Math.max(hitRect.height * 0.7, 8);
 
   // Collect all spans on the same visual line
   const lineSpans = [];

@@ -747,15 +747,15 @@ button:focus-visible {
 .reading-canvas {
   flex: 1;
   overflow: auto;
-  background: var(--bg-secondary);
-  background-image: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
-  background-size: 24px 24px;
+  background: #525659;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   scroll-behavior: smooth;
 }
+[data-theme="dark"] .reading-canvas { background: #3c3f41; }
+[data-theme="sepia"] .reading-canvas { background: #6b5c45; }
 
 .page-container {
   padding: 20px;
@@ -770,8 +770,8 @@ button:focus-visible {
 
 .page-wrapper {
   position: relative;
-  box-shadow: var(--shadow-page), 0 0 0 1px rgba(0,0,0,0.03);
-  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.15);
+  border-radius: 2px;
   overflow: hidden;
   background: white;
   transition: box-shadow var(--transition-smooth);
@@ -791,7 +791,7 @@ button:focus-visible {
 .page-number-label {
   text-align: center;
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: rgba(255,255,255,0.45);
   padding: 4px 0 8px;
   font-variant-numeric: tabular-nums;
 }
@@ -830,6 +830,18 @@ button:focus-visible {
   pointer-events: none;
   border-radius: 2px;
 }
+
+/* Search highlights on page */
+.search-page-highlight {
+  position: absolute;
+  background: rgba(255, 213, 0, 0.4);
+  border: 1px solid rgba(255, 180, 0, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 6;
+  mix-blend-mode: multiply;
+}
+[data-theme="dark"] .search-page-highlight { mix-blend-mode: screen; background: rgba(255, 200, 0, 0.25); }
 
 /* Note pins — sticky-note icons placed on the page */
 .note-pin {
@@ -878,6 +890,43 @@ button:focus-visible {
 /* Note mode cursor */
 .reading-canvas.note-mode { cursor: crosshair; }
 .reading-canvas.note-mode .page-wrapper { cursor: crosshair; }
+
+/* Highlight overlay — clickable */
+.highlight-overlay { pointer-events: none; }
+.highlight-overlay[data-anno-id] { pointer-events: auto; cursor: pointer; }
+
+/* Annotation Popover (click highlight to edit/delete) */
+.anno-popover {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: scaleIn 0.15s cubic-bezier(0.2,0,0,1);
+}
+.anno-popover-colors { display: flex; gap: 5px; align-items: center; }
+.anno-popover-color {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1), border-color 0.1s;
+  flex-shrink: 0;
+}
+.anno-popover-color:hover { transform: scale(1.3); }
+.anno-popover-color.active { border-color: var(--text-primary); }
+.anno-popover-sep { width: 1px; height: 18px; background: var(--border-strong); flex-shrink: 0; }
+.anno-popover-del {
+  color: var(--danger); padding: 4px 6px; border-radius: 6px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.anno-popover-del:hover { background: var(--danger-soft); }
 
 /* Long-press context toolbar */
 .selection-toolbar {
@@ -933,7 +982,54 @@ button:focus-visible {
 
 .reader-statusbar.hidden { opacity: 0; pointer-events: none; }
 
-.status-left, .status-right { display: flex; align-items: center; gap: 12px; }
+.status-left, .status-right { display: flex; align-items: center; gap: 8px; }
+
+.status-nav-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.status-nav-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.status-nav-btn:active { background: var(--bg-tertiary); transform: scale(0.88); }
+.status-nav-btn:disabled { opacity: 0.3; pointer-events: none; }
+
+.page-jump-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+  user-select: none;
+}
+.page-jump-display:hover { background: var(--bg-secondary); color: var(--text-primary); }
+
+.page-jump-input {
+  width: 40px;
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 2px 4px;
+  outline: none;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.page-jump-input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .status-divider {
   width: 1px;
@@ -1285,6 +1381,26 @@ button:focus-visible {
 
 .toggle.active::after { transform: translateX(20px); }
 
+/* Zoom Presets */
+.zoom-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.zoom-preset-btn {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.zoom-preset-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-strong); }
+.zoom-preset-btn.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
 /* Theme Picker */
 .theme-picker {
   display: flex;
@@ -1324,8 +1440,9 @@ button:focus-visible {
 }
 
 .focus-mode .reading-canvas {
-  background: var(--bg-primary);
+  background: #1a1a1a;
 }
+[data-theme="sepia"] .focus-mode .reading-canvas { background: #3d2e1e; }
 
 .focus-mode .page-container {
   padding-top: 40px;
@@ -2832,9 +2949,9 @@ function renderReader(state) {
           <button class="topbar-btn" id="btn-zoom-in" title="Zoom In" aria-label="Zoom In">${Icons.zoomIn}</button>
           <div class="topbar-sep"></div>
           <button class="topbar-btn" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">${Icons.search}</button>
+          <button class="topbar-btn" id="btn-download" title="Download PDF" aria-label="Download PDF">${Icons.download}</button>
           <button class="topbar-btn" id="btn-bookmark" title="Bookmark (Ctrl+B)" aria-label="Bookmark">${isBookmarked ? Icons.bookmarkFill : Icons.bookmark}</button>
           <button class="topbar-btn" id="btn-focus" title="Focus Mode" aria-label="Focus Mode">${Icons.focus}</button>
-          <button class="topbar-btn" id="btn-ruler" title="Reading Ruler" aria-label="Reading Ruler">${Icons.ruler}</button>
           <button class="topbar-btn" id="btn-settings" title="Settings" aria-label="Settings">${Icons.settings}</button>
         </div>
 
@@ -2858,7 +2975,13 @@ function renderReader(state) {
 
         <div class="reader-statusbar ${state.focusMode ? 'hidden' : ''}">
           <div class="status-left">
-            <span id="page-info">Page <strong>${state.currentPage}</strong> of ${state.totalPages}</span>
+            <button class="status-nav-btn" id="btn-prev-page" aria-label="Previous page" title="Previous page" ${state.currentPage <= 1 ? 'disabled' : ''}>${Icons.chevLeft}</button>
+            <div class="page-jump-display" id="page-jump-display" title="Click to jump to page">
+              <span id="page-num-current">${state.currentPage}</span>
+              <span style="opacity:0.4">/</span>
+              <span>${state.totalPages}</span>
+            </div>
+            <button class="status-nav-btn" id="btn-next-page" aria-label="Next page" title="Next page" ${state.currentPage >= state.totalPages ? 'disabled' : ''}>${Icons.chevRight}</button>
             <div class="status-divider"></div>
             <div class="page-slider-wrap">
               <input type="range" class="page-slider" id="page-slider"
@@ -3012,6 +3135,9 @@ function renderAnnotationToolbar(state) {
         <button class="anno-bar-btn ${mode === 'underline' ? 'active' : ''}" id="bar-btn-underline"
                 title="Underline (U)" aria-label="Underline" aria-pressed="${mode === 'underline'}"
                 style="font-size:15px;text-decoration:underline;text-underline-offset:2px;">U</button>
+        <button class="anno-bar-btn ${mode === 'strikethrough' ? 'active' : ''}" id="bar-btn-strikethrough"
+                title="Strikethrough (S)" aria-label="Strikethrough" aria-pressed="${mode === 'strikethrough'}"
+                style="font-size:15px;text-decoration:line-through;">S</button>
         <button class="anno-bar-btn ${mode === 'note' ? 'active' : ''}" id="bar-btn-note"
                 title="Note (N)" aria-label="Note" aria-pressed="${mode === 'note'}">
           ${Icons.note}
@@ -3019,6 +3145,10 @@ function renderAnnotationToolbar(state) {
         <button class="anno-bar-btn ${mode === 'pen' ? 'active' : ''}" id="bar-btn-pen"
                 title="Draw (D)" aria-label="Draw" aria-pressed="${mode === 'pen'}">
           ${Icons.pen}
+        </button>
+        <button class="anno-bar-btn ${mode === 'eraser' ? 'active' : ''}" id="bar-btn-eraser"
+                title="Eraser (E)" aria-label="Eraser" aria-pressed="${mode === 'eraser'}">
+          ${Icons.eraser}
         </button>
         <div class="anno-bar-sep"></div>
         <div class="anno-bar-colors" role="group" aria-label="Highlight color">
@@ -3067,6 +3197,15 @@ function renderSettingsModal(state) {
             <div class="setting-row">
               <div class="setting-label">Reading Ruler</div>
               <div class="toggle ${state.showRuler ? 'active' : ''}" id="toggle-ruler" role="switch" aria-checked="${state.showRuler}"></div>
+            </div>
+            <div class="setting-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+              <div class="setting-label">Zoom Level</div>
+              <div class="zoom-presets">
+                ${[{v:'fit',l:'Fit Width'},{v:'0.75',l:'75%'},{v:'1',l:'100%'},{v:'1.25',l:'125%'},{v:'1.5',l:'150%'},{v:'2',l:'200%'}].map(z => {
+                  const isActive = z.v === 'fit' ? state.fitMode === 'width' && state.zoom === 1 : state.fitMode !== 'width' && Math.abs(state.zoom - parseFloat(z.v)) < 0.01;
+                  return `<button class="zoom-preset-btn ${isActive ? 'active' : ''}" data-zoom-preset="${z.v}">${z.l}</button>`;
+                }).join('')}
+              </div>
             </div>
           </div>
           <div class="setting-group">
@@ -3260,11 +3399,12 @@ async function renderSinglePage(pageNum) {
   }
 
   // Defer text layer & overlays — don't block the visual render
-  requestAnimationFrame(() => {
-    engine.renderTextLayer(pageNum, wrapper, effectiveScale).catch(() => {});
+  requestAnimationFrame(async () => {
+    await engine.renderTextLayer(pageNum, wrapper, effectiveScale).catch(() => {});
     renderHighlightsForPage(pageNum, wrapper);
     renderFreehandForPage(pageNum, wrapper);
     setupDrawingForPage(pageNum, wrapper);
+    renderSearchHighlightsForPage(pageNum, wrapper);
   });
 }
 
@@ -3324,6 +3464,46 @@ async function renderThumbnails() {
   }
 }
 
+// ===== SEARCH HIGHLIGHT RENDERING (on-page yellow overlays) =====
+function renderSearchHighlightsForPage(pageNum, wrapper) {
+  wrapper.querySelectorAll('.search-page-highlight').forEach(el => el.remove());
+  const state = store.getState();
+  if (!state.searchOpen || !state.searchQuery || state.searchResults.length === 0) return;
+
+  const pageResults = state.searchResults.filter(r => r.page === pageNum);
+  if (pageResults.length === 0) return;
+
+  const textLayer = wrapper.querySelector('.text-layer');
+  if (!textLayer) return;
+
+  const query = state.searchQuery.toLowerCase();
+  const spans = Array.from(textLayer.querySelectorAll('span'));
+  const wRect = wrapper.getBoundingClientRect();
+
+  spans.forEach(span => {
+    const text = span.textContent.toLowerCase();
+    let idx = text.indexOf(query);
+    if (idx === -1) return;
+
+    // Use Range to get precise bounding rects
+    const range = document.createRange();
+    range.setStart(span.firstChild || span, Math.min(idx, (span.firstChild?.length || 0)));
+    range.setEnd(span.firstChild || span, Math.min(idx + query.length, (span.firstChild?.length || 0)));
+    const rects = Array.from(range.getClientRects());
+
+    rects.forEach(rect => {
+      if (rect.width < 1 || rect.height < 1) return;
+      const hl = document.createElement('div');
+      hl.className = 'search-page-highlight';
+      hl.style.left = (rect.left - wRect.left) + 'px';
+      hl.style.top = (rect.top - wRect.top) + 'px';
+      hl.style.width = rect.width + 'px';
+      hl.style.height = rect.height + 'px';
+      wrapper.appendChild(hl);
+    });
+  });
+}
+
 // ===== HIGHLIGHT / ANNOTATION RENDERING =====
 function renderHighlightsForPage(pageNum, wrapper) {
   wrapper.querySelectorAll('.highlight-overlay, .note-pin').forEach(el => el.remove());
@@ -3340,6 +3520,7 @@ function renderHighlightsForPage(pageNum, wrapper) {
     for (const rect of anno.rects) {
       const overlay = document.createElement('div');
       overlay.className = 'highlight-overlay';
+      overlay.dataset.annoId = anno.id;
       overlay.style.left = (rect.xPct * wW) + 'px';
       overlay.style.top = (rect.yPct * wH) + 'px';
       overlay.style.width = (rect.widthPct * wW) + 'px';
@@ -3348,6 +3529,11 @@ function renderHighlightsForPage(pageNum, wrapper) {
       if (anno.type === 'underline') {
         overlay.style.background = 'transparent';
         overlay.style.borderBottom = `2px solid var(--highlight-${anno.color || 'yellow'})`;
+      } else if (anno.type === 'strikethrough') {
+        overlay.style.background = 'transparent';
+        overlay.style.borderTop = `2px solid var(--highlight-${anno.color || 'yellow'})`;
+        overlay.style.top = (rect.yPct * wH + rect.heightPct * wH * 0.5) + 'px';
+        overlay.style.height = '0px';
       } else {
         overlay.style.background = `var(--highlight-${anno.color || 'yellow'})`;
       }
@@ -3356,7 +3542,9 @@ function renderHighlightsForPage(pageNum, wrapper) {
         overlay.style.cursor = 'pointer';
         overlay.title = anno.content;
         overlay.style.pointerEvents = 'auto';
-        overlay.addEventListener('click', () => showNotePopover(anno, overlay, wrapper));
+        overlay.addEventListener('click', (e) => { e.stopPropagation(); showNotePopover(anno, overlay, wrapper); });
+      } else if (anno.type === 'highlight' || anno.type === 'underline' || anno.type === 'strikethrough') {
+        overlay.addEventListener('click', (e) => { e.stopPropagation(); showAnnotationPopover(anno.id, e); });
       }
 
       wrapper.appendChild(overlay);
@@ -3428,6 +3616,80 @@ function showNotePopover(anno, anchor, wrapper) {
   }, 10);
 }
 
+// Annotation inline popover — click a highlight to edit color or delete
+function showAnnotationPopover(annoId, event) {
+  document.querySelectorAll('.anno-popover').forEach(el => el.remove());
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const anno = (state.annotations[docId] || []).find(a => a.id === annoId);
+  if (!anno) return;
+
+  const colors = [
+    { key: 'yellow', bg: 'rgba(250,204,21,0.95)' },
+    { key: 'green',  bg: 'rgba(74,222,128,0.95)' },
+    { key: 'blue',   bg: 'rgba(96,165,250,0.95)' },
+    { key: 'pink',   bg: 'rgba(244,114,182,0.95)' },
+    { key: 'purple', bg: 'rgba(168,85,247,0.95)' },
+  ];
+
+  const popover = document.createElement('div');
+  popover.className = 'anno-popover';
+  popover.innerHTML = `
+    <div class="anno-popover-colors">
+      ${colors.map(c => `<button class="anno-popover-color ${anno.color === c.key ? 'active' : ''}"
+        data-color="${c.key}" title="${c.key}" style="background:${c.bg}"></button>`).join('')}
+    </div>
+    <div class="anno-popover-sep"></div>
+    <button class="anno-popover-del" title="Delete annotation">✕ Delete</button>
+  `;
+
+  // Position near cursor
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = event.clientX - 60;
+  let top = event.clientY - 52;
+  left = Math.max(8, Math.min(left, vw - 220));
+  top = Math.max(8, Math.min(top, vh - 60));
+  popover.style.left = left + 'px';
+  popover.style.top = top + 'px';
+  document.body.appendChild(popover);
+
+  popover.querySelector('.anno-popover-del').addEventListener('click', () => {
+    deleteAnnotationById(annoId);
+    const wrapper = document.getElementById(`page-wrap-${anno.page}`);
+    if (wrapper) renderHighlightsForPage(anno.page, wrapper);
+    popover.remove();
+    showToast('Annotation deleted');
+  });
+
+  popover.querySelectorAll('.anno-popover-color').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newColor = btn.dataset.color;
+      const s = store.getState();
+      const dId = s.currentDoc?.id;
+      if (!dId) return;
+      const annos = s.annotations[dId] || [];
+      const updated = annos.map(a => a.id === annoId ? { ...a, color: newColor } : a);
+      store.setState({ annotations: { ...s.annotations, [dId]: updated } });
+      store.persistAnnotations();
+      const wrapper = document.getElementById(`page-wrap-${anno.page}`);
+      if (wrapper) renderHighlightsForPage(anno.page, wrapper);
+      popover.remove();
+    });
+  });
+
+  // Auto-dismiss
+  setTimeout(() => {
+    document.addEventListener('click', function _close(e) {
+      if (!popover.contains(e.target)) {
+        popover.remove();
+        document.removeEventListener('click', _close);
+      }
+    });
+  }, 10);
+}
+
 // Delete a specific annotation by ID
 function deleteAnnotationById(annoId) {
   const state = store.getState();
@@ -3459,7 +3721,7 @@ function setupTextSelectionHandler() {
       if (!startEl?.closest('.text-layer')) return;
 
       // If annotation mode is active, apply directly
-      if (state.annotationMode === 'highlight' || state.annotationMode === 'underline' || state.annotationMode === 'note') {
+      if (state.annotationMode === 'highlight' || state.annotationMode === 'underline' || state.annotationMode === 'strikethrough' || state.annotationMode === 'note') {
         handleSelectionAction(state.annotationMode);
       } else if (!document.getElementById('selection-toolbar')) {
         // Show toolbar for manual drag-selection
@@ -3850,9 +4112,59 @@ function setupDrawingForPage(pageNum, wrapper) {
   const existingDraw = wrapper.querySelector('.drawing-canvas');
   if (existingDraw) existingDraw.remove();
 
-  // Only create if pen mode
+  // Only create if pen or eraser mode
   const state = store.getState();
-  if (state.annotationMode !== 'pen') return;
+  if (state.annotationMode !== 'pen' && state.annotationMode !== 'eraser') return;
+
+  // Eraser mode: click/drag to erase freehand strokes near cursor
+  if (state.annotationMode === 'eraser') {
+    const eraserCvs = document.createElement('canvas');
+    eraserCvs.className = 'drawing-canvas';
+    eraserCvs.width = wrapper.clientWidth * (window.devicePixelRatio || 1);
+    eraserCvs.height = wrapper.clientHeight * (window.devicePixelRatio || 1);
+    eraserCvs.style.cursor = 'cell';
+    const wW = wrapper.clientWidth;
+    const wH = wrapper.clientHeight;
+    const eraseRadius = 20; // px
+
+    const eraseAt = (ex, ey) => {
+      const s = store.getState();
+      const docId = s.currentDoc?.id;
+      if (!docId) return;
+      const annos = s.annotations[docId] || [];
+      const xPct = ex / wW;
+      const yPct = ey / wH;
+      const updated = annos.filter(a => {
+        if (a.page !== pageNum || a.type !== 'freehand' || !a.points) return true;
+        // Check if any point is within eraseRadius
+        return !a.points.some(pt =>
+          Math.hypot((pt.xPct - xPct) * wW, (pt.yPct - yPct) * wH) < eraseRadius
+        );
+      });
+      if (updated.length !== annos.length) {
+        const allAnnos = { ...s.annotations, [docId]: updated };
+        store.setState({ annotations: allAnnos });
+        store.persistAnnotations();
+        renderFreehandForPage(pageNum, wrapper);
+      }
+    };
+
+    let erasing = false;
+    eraserCvs.addEventListener('pointerdown', (e) => {
+      erasing = true;
+      eraserCvs.setPointerCapture(e.pointerId);
+      const rect = eraserCvs.getBoundingClientRect();
+      eraseAt(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    eraserCvs.addEventListener('pointermove', (e) => {
+      if (!erasing) return;
+      const rect = eraserCvs.getBoundingClientRect();
+      eraseAt(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    eraserCvs.addEventListener('pointerup', () => { erasing = false; });
+    wrapper.appendChild(eraserCvs);
+    return;
+  }
 
   const drawCvs = document.createElement('canvas');
   drawCvs.className = 'drawing-canvas';
@@ -4008,15 +4320,69 @@ function attachReaderEvents() {
   document.getElementById('btn-focus')?.addEventListener('click', () => {
     store.setState({ focusMode: !store.getState().focusMode });
   });
-  document.getElementById('btn-ruler')?.addEventListener('click', () => {
-    store.setState({ showRuler: !store.getState().showRuler });
-  });
   document.getElementById('btn-settings')?.addEventListener('click', () => {
     store.setState({ settingsOpen: true });
+  });
+  document.getElementById('btn-download')?.addEventListener('click', async () => {
+    const s = store.getState();
+    if (!s.currentDoc) return;
+    try {
+      const ab = await docStorage.getFile(s.currentDoc.id);
+      if (!ab) { showToast('File not found in local storage.'); return; }
+      const blob = new Blob([ab], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = s.currentDoc.name.endsWith('.pdf') ? s.currentDoc.name : s.currentDoc.name + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Download started');
+    } catch (e) {
+      showToast('Download failed.');
+    }
   });
 
   document.getElementById('page-slider')?.addEventListener('input', (e) => {
     goToPage(parseInt(e.target.value));
+  });
+
+  // Prev/Next page navigation
+  document.getElementById('btn-prev-page')?.addEventListener('click', () => {
+    const s = store.getState();
+    if (s.currentPage > 1) goToPage(s.currentPage - 1);
+  });
+  document.getElementById('btn-next-page')?.addEventListener('click', () => {
+    const s = store.getState();
+    if (s.currentPage < s.totalPages) goToPage(s.currentPage + 1);
+  });
+
+  // Page jump — click page number to edit
+  document.getElementById('page-jump-display')?.addEventListener('click', () => {
+    const s = store.getState();
+    const display = document.getElementById('page-jump-display');
+    if (!display) return;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'page-jump-input';
+    input.value = s.currentPage;
+    input.min = 1;
+    input.max = s.totalPages;
+    input.setAttribute('aria-label', 'Go to page');
+    display.replaceWith(input);
+    input.focus();
+    input.select();
+    const commit = () => {
+      const page = Math.max(1, Math.min(s.totalPages, parseInt(input.value) || s.currentPage));
+      goToPage(page);
+      // replace input back with display (re-render will handle it)
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { commit(); input.blur(); }
+      if (e.key === 'Escape') { input.blur(); }
+    });
+    input.addEventListener('blur', commit);
   });
 
   // Side panel tabs
@@ -4047,14 +4413,17 @@ function attachReaderEvents() {
       if (query.length >= 2) {
         const results = await engine.searchText(query);
         store.setState({ searchResults: results });
+        refreshSearchHighlights();
       } else {
         store.setState({ searchResults: [] });
+        refreshSearchHighlights();
       }
     }, 300);
   });
 
   document.getElementById('btn-close-search')?.addEventListener('click', () => {
     store.setState({ searchOpen: false, searchQuery: '', searchResults: [] });
+    refreshSearchHighlights();
   });
 
   document.getElementById('search-results')?.addEventListener('click', (e) => {
@@ -4069,12 +4438,19 @@ function attachReaderEvents() {
   document.getElementById('bar-btn-underline')?.addEventListener('click', () => {
     toggleAnnotationMode('underline');
   });
+  document.getElementById('bar-btn-strikethrough')?.addEventListener('click', () => {
+    toggleAnnotationMode('strikethrough');
+  });
   document.getElementById('bar-btn-note')?.addEventListener('click', () => {
     toggleAnnotationMode('note');
     refreshDrawingCanvases();
   });
   document.getElementById('bar-btn-pen')?.addEventListener('click', () => {
     toggleAnnotationMode('pen');
+    refreshDrawingCanvases();
+  });
+  document.getElementById('bar-btn-eraser')?.addEventListener('click', () => {
+    toggleAnnotationMode('eraser');
     refreshDrawingCanvases();
   });
   document.getElementById('bar-btn-undo')?.addEventListener('click', undoAnnotation);
@@ -4161,6 +4537,13 @@ function refreshDrawingCanvases() {
   }
 }
 
+function refreshSearchHighlights() {
+  for (const p of renderedPages) {
+    const wrapper = document.getElementById(`page-wrap-${p}`);
+    if (wrapper) renderSearchHighlightsForPage(p, wrapper);
+  }
+}
+
 function attachSettingsEvents() {
   document.getElementById('modal-overlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'modal-overlay') store.setState({ settingsOpen: false });
@@ -4181,12 +4564,23 @@ function attachSettingsEvents() {
   document.getElementById('toggle-ruler')?.addEventListener('click', () => {
     store.setState({ showRuler: !store.getState().showRuler });
   });
+  document.querySelectorAll('.zoom-preset-btn[data-zoom-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.zoomPreset;
+      if (v === 'fit') {
+        store.setState({ fitMode: 'width', zoom: 1 });
+      } else {
+        store.setState({ fitMode: 'width', zoom: parseFloat(v) });
+      }
+      renderVisiblePages();
+    });
+  });
 }
 
 // ===== ANNOTATION BAR (direct DOM updates — no re-render needed) =====
 function updateAnnoBar(state) {
   // Update tool button active states
-  ['highlight', 'underline', 'note', 'pen'].forEach(m => {
+  ['highlight', 'underline', 'strikethrough', 'note', 'pen', 'eraser'].forEach(m => {
     const btn = document.getElementById(`bar-btn-${m}`);
     if (btn) {
       btn.classList.toggle('active', state.annotationMode === m);

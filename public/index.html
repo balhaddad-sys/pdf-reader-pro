@@ -827,6 +827,54 @@ button:focus-visible {
   border-radius: 2px;
 }
 
+/* Note pins — sticky-note icons placed on the page */
+.note-pin {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 10;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow-sm);
+  border: 2px solid rgba(255,255,255,0.9);
+}
+.note-pin:hover { transform: scale(1.2); box-shadow: var(--shadow-md); }
+.note-pin svg { width: 14px; height: 14px; color: #fff; flex-shrink: 0; }
+
+/* Note popover — shown when clicking a pin */
+.note-popover {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  width: 240px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  pointer-events: auto;
+}
+.note-popover-text { margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.note-popover-quote { font-size: 11px; color: var(--text-tertiary); font-style: italic; border-left: 2px solid var(--border-strong); padding-left: 8px; margin-bottom: 8px; }
+.note-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.note-popover-actions button { font-size: 11px; padding: 4px 10px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-ui); font-weight: 500; }
+.note-popover .btn-delete { background: var(--danger-soft); color: var(--danger); }
+.note-popover .btn-delete:hover { background: var(--danger); color: white; }
+.note-popover .btn-close { background: var(--bg-secondary); color: var(--text-secondary); }
+
+/* Note mode cursor */
+.reading-canvas.note-mode { cursor: crosshair; }
+.reading-canvas.note-mode .page-wrapper { cursor: crosshair; }
+
 /* Status Bar */
 .reader-statusbar {
   height: var(--statusbar-height);
@@ -2063,22 +2111,27 @@ function showToast(msg) {
 }
 
 function showNoteDialog(selectedText, onSave) {
+  const hasQuote = selectedText && selectedText.trim().length > 0;
+  const quoteHtml = hasQuote
+    ? `<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${escapeHtml(selectedText.slice(0, 60))}${selectedText.length > 60 ? '...' : ''}"</div>`
+    : '';
+
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML = `
     <div style="background:var(--bg-canvas);border-radius:var(--radius-lg);padding:20px;width:100%;max-width:360px;box-shadow:var(--shadow-lg)">
-      <div style="font-weight:600;font-size:15px;margin-bottom:4px">Add Note</div>
-      <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${selectedText.slice(0, 60)}${selectedText.length > 60 ? '...' : ''}"</div>
-      <textarea id="note-input" rows="3" placeholder="Write your note..."
+      <div style="font-weight:600;font-size:15px;margin-bottom:${hasQuote ? '4' : '12'}px">${hasQuote ? 'Add Note' : 'Quick Note'}</div>
+      ${quoteHtml}
+      <textarea id="note-input" rows="4" placeholder="Write your note..." autofocus
         style="width:100%;padding:10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:14px;resize:vertical;background:var(--bg-primary);color:var(--text-primary)"></textarea>
       <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-        <button id="note-cancel" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);background:var(--bg-secondary)">Cancel</button>
-        <button id="note-save" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:white;background:var(--accent);font-weight:600">Save</button>
+        <button id="note-cancel" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);background:var(--bg-secondary);cursor:pointer">Cancel</button>
+        <button id="note-save" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:white;background:var(--accent);font-weight:600;cursor:pointer">Save</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   const input = overlay.querySelector('#note-input');
-  input.focus();
+  setTimeout(() => input.focus(), 50);
   overlay.querySelector('#note-cancel').onclick = () => overlay.remove();
   overlay.querySelector('#note-save').onclick = () => {
     const text = input.value.trim();
@@ -2455,15 +2508,18 @@ function renderSidePanelContent(state) {
     case 'annotations':
       const docAnnos = state.annotations[state.currentDoc?.id] || [];
       if (docAnnos.length === 0) {
-        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No annotations yet. Use the toolbar to highlight or add notes.</div>`;
+        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No annotations yet. Select the note tool and tap anywhere on a page to add a note, or select text to highlight.</div>`;
       }
-      return docAnnos.sort((a, b) => a.page - b.page).map(a => `
+      return docAnnos.sort((a, b) => a.page - b.page).map(a => {
+        const label = a.type === 'note' && a.content ? a.content : (a.text || 'Highlight');
+        const typeLabel = a.type === 'note' && !a.rects ? 'pin note' : a.type;
+        return `
         <div class="annotation-item" data-page="${a.page}"
              style="border-left-color: var(--highlight-${a.color || 'yellow'})">
-          <div class="annotation-text">${escapeHtml(a.text || a.content || 'Highlight')}</div>
-          <div class="annotation-meta">Page ${a.page} &middot; ${a.type} &middot; ${formatDate(a.created)}</div>
-        </div>
-      `).join('');
+          <div class="annotation-text">${escapeHtml(label)}</div>
+          <div class="annotation-meta">Page ${a.page} &middot; ${typeLabel} &middot; ${formatDate(a.created)}</div>
+        </div>`;
+      }).join('');
     default:
       return '';
   }
@@ -2809,16 +2865,17 @@ async function renderThumbnails() {
 
 // ===== HIGHLIGHT / ANNOTATION RENDERING =====
 function renderHighlightsForPage(pageNum, wrapper) {
-  wrapper.querySelectorAll('.highlight-overlay').forEach(el => el.remove());
+  wrapper.querySelectorAll('.highlight-overlay, .note-pin').forEach(el => el.remove());
 
   const state = store.getState();
   const docId = state.currentDoc?.id;
   const docAnnos = state.annotations[docId] || [];
-  const pageAnnos = docAnnos.filter(a => a.page === pageNum && a.rects);
   const wW = wrapper.clientWidth;
   const wH = wrapper.clientHeight;
 
-  for (const anno of pageAnnos) {
+  // Render rect-based annotations (highlights, underlines, text-attached notes)
+  const rectAnnos = docAnnos.filter(a => a.page === pageNum && a.rects);
+  for (const anno of rectAnnos) {
     for (const rect of anno.rects) {
       const overlay = document.createElement('div');
       overlay.className = 'highlight-overlay';
@@ -2838,11 +2895,87 @@ function renderHighlightsForPage(pageNum, wrapper) {
         overlay.style.cursor = 'pointer';
         overlay.title = anno.content;
         overlay.style.pointerEvents = 'auto';
+        overlay.addEventListener('click', () => showNotePopover(anno, overlay, wrapper));
       }
 
       wrapper.appendChild(overlay);
     }
   }
+
+  // Render positioned note pins (tap-to-add notes without text selection)
+  const pinAnnos = docAnnos.filter(a => a.page === pageNum && a.type === 'note' && a.xPct != null && !a.rects);
+  for (const anno of pinAnnos) {
+    const pin = document.createElement('div');
+    pin.className = 'note-pin';
+    pin.style.left = (anno.xPct * wW - 14) + 'px';
+    pin.style.top = (anno.yPct * wH - 14) + 'px';
+    pin.style.background = `var(--highlight-${anno.color || 'yellow'})`;
+    pin.innerHTML = Icons.note.replace(/width="18" height="18"/, 'width="14" height="14"');
+    pin.title = anno.content || '';
+    pin.addEventListener('click', (e) => { e.stopPropagation(); showNotePopover(anno, pin, wrapper); });
+    wrapper.appendChild(pin);
+  }
+}
+
+// Show a popover with note content, with delete option
+function showNotePopover(anno, anchor, wrapper) {
+  // Remove any existing popover
+  document.querySelectorAll('.note-popover').forEach(el => el.remove());
+
+  const popover = document.createElement('div');
+  popover.className = 'note-popover';
+
+  // Position near the anchor
+  const wRect = wrapper.getBoundingClientRect();
+  const aRect = anchor.getBoundingClientRect();
+  let left = aRect.left - wRect.left + aRect.width / 2 - 120;
+  let top = aRect.bottom - wRect.top + 6;
+  // Keep within bounds
+  left = Math.max(4, Math.min(left, wrapper.clientWidth - 248));
+  if (top + 200 > wrapper.clientHeight) top = aRect.top - wRect.top - 210;
+
+  popover.style.left = left + 'px';
+  popover.style.top = top + 'px';
+
+  const quoteHtml = anno.text ? `<div class="note-popover-quote">${escapeHtml(anno.text.slice(0, 100))}${anno.text.length > 100 ? '...' : ''}</div>` : '';
+  popover.innerHTML = `
+    ${quoteHtml}
+    <div class="note-popover-text">${escapeHtml(anno.content || '')}</div>
+    <div class="note-popover-actions">
+      <button class="btn-delete" aria-label="Delete note">Delete</button>
+      <button class="btn-close" aria-label="Close">Close</button>
+    </div>
+  `;
+  wrapper.appendChild(popover);
+
+  popover.querySelector('.btn-close').addEventListener('click', () => popover.remove());
+  popover.querySelector('.btn-delete').addEventListener('click', () => {
+    deleteAnnotationById(anno.id);
+    renderHighlightsForPage(anno.page, wrapper);
+    popover.remove();
+    showToast('Note deleted');
+  });
+
+  // Close on click outside
+  setTimeout(() => {
+    document.addEventListener('click', function _closePop(e) {
+      if (!popover.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
+        popover.remove();
+        document.removeEventListener('click', _closePop);
+      }
+    });
+  }, 10);
+}
+
+// Delete a specific annotation by ID
+function deleteAnnotationById(annoId) {
+  const state = store.getState();
+  const docId = state.currentDoc?.id;
+  if (!docId) return;
+  const annotations = { ...state.annotations };
+  annotations[docId] = (annotations[docId] || []).filter(a => a.id !== annoId);
+  store.setState({ annotations });
+  store.persistAnnotations();
 }
 
 function setupTextSelectionHandler() {
@@ -2892,6 +3025,41 @@ function setupTextSelectionHandler() {
     }
 
     selection.removeAllRanges();
+  });
+}
+
+// ===== TAP-TO-ADD-NOTE (positioned notes without text selection) =====
+function setupTapToNote() {
+  document.addEventListener('click', (e) => {
+    const state = store.getState();
+    if (state.view !== 'reader' || state.annotationMode !== 'note') return;
+
+    // Don't trigger if clicking on UI elements, existing notes, or popovers
+    if (e.target.closest('.note-pin, .note-popover, .anno-menu, .anno-fab, .reader-topbar, .reader-statusbar, .side-panel, .settings-overlay, .search-overlay')) return;
+
+    // Only trigger if there's no text selection (text-selection notes handled in mouseup)
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && selection.toString().trim()) return;
+
+    // Find the page wrapper that was clicked
+    const pageWrapper = e.target.closest('.page-wrapper');
+    if (!pageWrapper) return;
+
+    const pageNum = parseInt(pageWrapper.dataset.page);
+    if (!pageNum) return;
+
+    const wrapperRect = pageWrapper.getBoundingClientRect();
+    const xPct = (e.clientX - wrapperRect.left) / wrapperRect.width;
+    const yPct = (e.clientY - wrapperRect.top) / wrapperRect.height;
+
+    // Clamp within page bounds
+    if (xPct < 0 || xPct > 1 || yPct < 0 || yPct > 1) return;
+
+    showNoteDialog('', (noteText) => {
+      addAnnotation('note', pageNum, { content: noteText, xPct, yPct });
+      renderHighlightsForPage(pageNum, pageWrapper);
+      showToast('Note added');
+    });
   });
 }
 
@@ -3500,7 +3668,13 @@ function removeBookmark(page) {
 // ===== ANNOTATIONS =====
 function toggleAnnotationMode(mode) {
   const current = store.getState().annotationMode;
-  store.setState({ annotationMode: current === mode ? null : mode });
+  const newMode = current === mode ? null : mode;
+  store.setState({ annotationMode: newMode });
+  // Toggle crosshair cursor when in note mode
+  const canvas = document.querySelector('.reading-canvas');
+  if (canvas) {
+    canvas.classList.toggle('note-mode', newMode === 'note');
+  }
 }
 
 function addAnnotation(type, page, data) {
@@ -3737,6 +3911,7 @@ store.subscribe((state, prev) => {
 
 // ===== INITIALIZE =====
 setupTextSelectionHandler();
+setupTapToNote();
 
 window.addEventListener('pdf-loaded', () => {
   renderVisiblePages(true);

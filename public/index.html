@@ -1579,8 +1579,342 @@ button:focus-visible {
 
 /* Print */
 @media print {
-  .reader-topbar, .reader-statusbar, .side-panel, .anno-fab, .anno-menu { display: none !important; }
+  .reader-topbar, .reader-statusbar, .side-panel, .anno-fab, .anno-menu, .anno-bar { display: none !important; }
   .reading-canvas { overflow: visible !important; }
+}
+
+/* ===== AUTO-HIDE TOPBAR ===== */
+.reader-topbar {
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth), margin-top var(--transition-smooth) !important;
+}
+.reader-topbar.scroll-hidden {
+  transform: translateY(-100%);
+  margin-top: calc(-1 * var(--topbar-height));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ===== READING PROGRESS BAR ===== */
+.reading-progress-track {
+  height: 3px;
+  background: var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  align-self: stretch;
+}
+.reading-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+/* ===== ANNOTATION BAR (bottom toolbar) ===== */
+.anno-bar {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(200%);
+  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  border-top: 1px solid var(--border);
+  padding: 7px 12px;
+  padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  flex-shrink: 0;
+  transition: transform var(--transition-smooth), opacity var(--transition-smooth);
+}
+.focus-mode .anno-bar { transform: translateY(100%); opacity: 0; pointer-events: none; }
+
+.anno-bar-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  max-width: 480px;
+  justify-content: center;
+}
+
+.anno-bar-btn {
+  width: 42px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  font-size: 14px;
+  font-weight: 800;
+  position: relative;
+}
+.anno-bar-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.anno-bar-btn:active { background: var(--bg-tertiary); transform: scale(0.88); }
+.anno-bar-btn.active { background: var(--accent-soft); color: var(--accent); }
+.anno-bar-btn.active svg { stroke: var(--accent); }
+
+.anno-bar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border-strong);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.anno-bar-colors {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.34,1.56,0.64,1), border-color 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.color-swatch:hover { transform: scale(1.25); }
+.color-swatch:active { transform: scale(0.8); }
+.color-swatch.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-canvas);
+  transform: scale(1.1);
+}
+
+/* ===== SELECTION TOOLBAR (enhanced) ===== */
+.sel-tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+.sel-tb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  margin: 0 1px;
+  flex-shrink: 0;
+}
+.sel-tb-colors {
+  display: flex;
+  gap: 6px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  justify-content: center;
+  align-items: center;
+}
+.sel-color-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1), border-color 0.1s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.sel-color-btn:hover { transform: scale(1.3); }
+.sel-color-btn:active { transform: scale(0.8); }
+.sel-color-btn.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-canvas); }
+
+/* ===== LIBRARY STATS ===== */
+.lib-stats {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  margin-bottom: 16px;
+  padding: 0 2px;
+}
+.lib-stats-dot { opacity: 0.35; font-size: 14px; line-height: 1; }
+
+/* ===== LIBRARY THUMBNAIL ===== */
+.doc-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+  border-radius: 0;
+  transition: transform var(--transition-smooth);
+}
+.doc-card:hover .doc-thumb-img { transform: scale(1.04); }
+
+/* Continue reading badge */
+.doc-card-continue {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  z-index: 3;
+  letter-spacing: 0.1px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+
+/* Shimmer skeleton for thumbnail loading */
+.thumb-shimmer {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--bg-secondary) 0%, var(--bg-tertiary) 40%, var(--bg-secondary) 80%);
+  background-size: 300% 100%;
+  animation: shimmer 1.6s infinite;
+}
+
+/* ===== NOTE DIALOG REDESIGN ===== */
+.note-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+@media (min-width: 600px) {
+  .note-dialog-overlay { align-items: center; }
+}
+.note-dialog-sheet {
+  background: var(--bg-canvas);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  width: 100%;
+  max-width: 520px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.2);
+  animation: slideInBottom 0.3s cubic-bezier(0.2,0,0,1);
+}
+@media (min-width: 600px) {
+  .note-dialog-sheet {
+    border-radius: var(--radius-xl);
+    animation: scaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  }
+}
+.note-dialog-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  margin: 12px auto 0;
+}
+.note-dialog-header {
+  padding: 16px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.note-dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.note-dialog-quote {
+  margin: 0 20px 12px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.note-dialog-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.note-dialog-textarea::placeholder { color: var(--text-tertiary); }
+.note-dialog-footer {
+  padding: 12px 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+.note-dialog-charcount {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex: 1;
+}
+.note-dialog-cancel {
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-ui);
+}
+.note-dialog-cancel:hover { background: var(--bg-tertiary); }
+.note-dialog-save {
+  padding: 9px 22px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  background: var(--accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-ui);
+  box-shadow: 0 2px 8px var(--accent-glow);
+  letter-spacing: -0.1px;
+}
+.note-dialog-save:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.note-dialog-save:active { transform: scale(0.96); }
+
+/* ===== RESPONSIVE ANNO BAR ===== */
+@media (max-width: 768px) {
+  .anno-bar { padding: 6px 8px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .anno-bar-btn { width: 38px; height: 34px; }
+  .anno-bar-sep { margin: 0 4px; }
+  .color-swatch { width: 18px; height: 18px; }
+}
+@media (max-width: 420px) {
+  .anno-bar-sep { margin: 0 2px; }
+  .anno-bar-btn { width: 34px; height: 32px; }
+  .anno-bar-colors { gap: 4px; }
+  .color-swatch { width: 16px; height: 16px; }
 }
 
 /* ===== ACCESSIBILITY ===== */
@@ -1610,10 +1944,10 @@ button:focus-visible {
 /* Minimum touch targets (WCAG 2.2 AA - 44x44px) */
 .reader-topbar button,
 .reader-statusbar button,
-.anno-menu button,
+.anno-bar .anno-bar-btn,
 .side-panel-tabs button {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 38px;
+  min-height: 38px;
 }
 
 /* Reduced motion: disable all animations and transitions */
@@ -2148,37 +2482,64 @@ function showToast(msg) {
 
 function showNoteDialog(selectedText, onSave) {
   const hasQuote = selectedText && selectedText.trim().length > 0;
-  const quoteHtml = hasQuote
-    ? `<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${escapeHtml(selectedText.slice(0, 60))}${selectedText.length > 60 ? '...' : ''}"</div>`
-    : '';
 
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.className = 'note-dialog-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', hasQuote ? 'Add note' : 'Quick note');
+
   overlay.innerHTML = `
-    <div style="background:var(--bg-canvas);border-radius:var(--radius-lg);padding:20px;width:100%;max-width:360px;box-shadow:var(--shadow-lg)">
-      <div style="font-weight:600;font-size:15px;margin-bottom:${hasQuote ? '4' : '12'}px">${hasQuote ? 'Add Note' : 'Quick Note'}</div>
-      ${quoteHtml}
-      <textarea id="note-input" rows="4" placeholder="Write your note..." autofocus
-        style="width:100%;padding:10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-family:var(--font-ui);font-size:14px;resize:vertical;background:var(--bg-primary);color:var(--text-primary)"></textarea>
-      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-        <button id="note-cancel" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);background:var(--bg-secondary);cursor:pointer">Cancel</button>
-        <button id="note-save" style="padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;color:white;background:var(--accent);font-weight:600;cursor:pointer">Save</button>
+    <div class="note-dialog-sheet">
+      <div class="note-dialog-handle"></div>
+      <div class="note-dialog-header">
+        <div class="note-dialog-title">${hasQuote ? 'Add Note' : 'Quick Note'}</div>
+        <button class="topbar-btn" id="note-close-btn" aria-label="Close" style="width:32px;height:32px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
       </div>
-    </div>`;
+      ${hasQuote ? `<div class="note-dialog-quote">"${escapeHtml(selectedText.slice(0, 200))}${selectedText.length > 200 ? '…' : ''}"</div>` : ''}
+      <textarea class="note-dialog-textarea" id="note-input" placeholder="Write your note here…" rows="4" autofocus></textarea>
+      <div class="note-dialog-footer">
+        <span class="note-dialog-charcount" id="note-charcount">0 chars</span>
+        <button class="note-dialog-cancel" id="note-cancel">Cancel</button>
+        <button class="note-dialog-save" id="note-save">Save Note</button>
+      </div>
+    </div>
+  `;
+
   document.body.appendChild(overlay);
   const input = overlay.querySelector('#note-input');
-  setTimeout(() => input.focus(), 50);
-  overlay.querySelector('#note-cancel').onclick = () => overlay.remove();
-  overlay.querySelector('#note-save').onclick = () => {
+  const charcount = overlay.querySelector('#note-charcount');
+
+  setTimeout(() => input.focus(), 80);
+
+  input.addEventListener('input', () => {
+    const len = input.value.length;
+    charcount.textContent = len + (len === 1 ? ' char' : ' chars');
+  });
+
+  function doSave() {
     const text = input.value.trim();
-    if (text) { onSave(text); }
+    if (text) onSave(text);
     overlay.remove();
-  };
+  }
+
+  overlay.querySelector('#note-cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#note-close-btn').onclick = () => overlay.remove();
+  overlay.querySelector('#note-save').onclick = doSave;
+
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); overlay.querySelector('#note-save').click(); }
+    if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) || (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 600)) {
+      e.preventDefault();
+      doSave();
+    }
     if (e.key === 'Escape') overlay.remove();
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 function escapeHtml(s) {
@@ -2245,6 +2606,8 @@ async function handleFileOpen(file) {
     store.persistDocs();
 
     requestAnimationFrame(() => window.dispatchEvent(new Event('pdf-loaded')));
+    // Capture thumbnail in background (non-blocking)
+    setTimeout(() => captureLibraryThumb(docInfo.id, doc), 800);
   } catch (err) {
     console.error('Failed to load PDF:', err);
     store.setState({ loading: false, loadProgress: 0, view: 'library' });
@@ -2283,6 +2646,8 @@ async function handleOpenFromLibrary(docId) {
       store.setState({ documents: docs });
       store.persistDocs();
       requestAnimationFrame(() => window.dispatchEvent(new Event('pdf-loaded')));
+      // Capture thumbnail if not yet stored
+      setTimeout(() => captureLibraryThumb(docId, pdfDoc), 800);
     } else {
       store.setState({ loading: false, view: 'library' });
       showToast('File not found. Please re-open the PDF.');
@@ -2297,6 +2662,7 @@ async function handleOpenFromLibrary(docId) {
 
 async function deleteDocument(docId) {
   await docStorage.deleteFile(docId);
+  try { localStorage.removeItem('pdfr-thumb-' + docId); } catch(_) {}
   const docs = store.getState().documents.filter(d => d.id !== docId);
   const bookmarks = { ...store.getState().bookmarks };
   delete bookmarks[docId];
@@ -2337,6 +2703,8 @@ function renderApp() {
 // ===== LIBRARY VIEW =====
 function renderLibrary(state) {
   const docs = state.documents.sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0));
+  const totalAnnos = Object.values(state.annotations || {}).reduce((s, a) => s + a.length, 0);
+  const totalBms = Object.values(state.bookmarks || {}).reduce((s, a) => s + a.length, 0);
 
   return `
     <div class="app-shell" data-view="library">
@@ -2375,9 +2743,10 @@ function renderLibrary(state) {
               <input type="text" placeholder="Search your library..." id="lib-search-input" aria-label="Search library">
             </div>
 
-            <div class="library-tabs">
-              <button class="lib-tab active" data-tab="recent">Recent</button>
-              <button class="lib-tab" data-tab="all">All Files</button>
+            <div class="lib-stats">
+              <span>${docs.length} ${docs.length === 1 ? 'document' : 'documents'}</span>
+              ${totalAnnos > 0 ? `<span class="lib-stats-dot">·</span><span>${totalAnnos} annotation${totalAnnos !== 1 ? 's' : ''}</span>` : ''}
+              ${totalBms > 0 ? `<span class="lib-stats-dot">·</span><span>${totalBms} bookmark${totalBms !== 1 ? 's' : ''}</span>` : ''}
             </div>
           ` : ''}
         </div>
@@ -2385,21 +2754,39 @@ function renderLibrary(state) {
         <div class="library-content">
           ${docs.length === 0 ? `
             <div class="library-empty">
-              <div class="library-empty-icon">${Icons.file}</div>
-              <h3>Your library is empty</h3>
-              <p>Open a PDF to get started. You can also drag and drop files here.</p>
+              <div class="library-empty-icon">
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                  <line x1="8" y1="13" x2="16" y2="13"/>
+                  <line x1="8" y1="17" x2="13" y2="17"/>
+                </svg>
+              </div>
+              <h3>No PDFs yet</h3>
+              <p>Tap "Open PDF" to add your first document, or drag and drop a file anywhere.</p>
+              <button class="lib-btn lib-btn-primary" id="btn-open-empty" style="margin-top:16px;max-width:200px">
+                ${Icons.plus} Open PDF
+              </button>
             </div>
           ` : `
             <div class="library-grid" id="library-grid">
-              ${docs.map((doc, i) => `
-                <div class="doc-card" data-doc-id="${escapeHtml(doc.id)}" style="animation-delay: ${i * 0.05}s">
+              ${docs.map((doc, i) => {
+                const thumb = getThumb(doc.id);
+                const hasProgress = doc.progress > 0;
+                const isContinue = doc.lastPage > 1;
+                return `
+                <div class="doc-card" data-doc-id="${escapeHtml(doc.id)}" style="animation-delay: ${Math.min(i * 0.04, 0.3)}s">
                   <div class="doc-card-thumb">
-                    <button class="doc-card-delete" data-delete-id="${escapeHtml(doc.id)}" aria-label="Delete document" title="Remove">${Icons.trash}</button>
-                    <div class="thumb-placeholder">
-                      ${Icons.file}
-                      <span style="font-size:11px; font-weight:500;">${doc.pageCount || '?'} pages</span>
-                    </div>
-                    ${doc.progress > 0 ? `
+                    <button class="doc-card-delete" data-delete-id="${escapeHtml(doc.id)}" aria-label="Remove document">${Icons.trash}</button>
+                    ${thumb
+                      ? `<img class="doc-thumb-img" src="${thumb}" alt="Page preview" loading="lazy">`
+                      : `<div class="thumb-placeholder">
+                          ${Icons.file}
+                          <span style="font-size:11px;font-weight:500">${doc.pageCount || '?'} pages</span>
+                        </div>`
+                    }
+                    ${isContinue ? `<div class="doc-card-continue">p.${doc.lastPage}</div>` : ''}
+                    ${hasProgress ? `
                       <div class="doc-card-progress">
                         <div class="doc-card-progress-bar" style="width:${Math.round(doc.progress * 100)}%"></div>
                       </div>
@@ -2413,8 +2800,8 @@ function renderLibrary(state) {
                       <span>${formatDate(doc.lastOpened)}</span>
                     </div>
                   </div>
-                </div>
-              `).join('')}
+                </div>`;
+              }).join('')}
             </div>
           `}
         </div>
@@ -2460,6 +2847,10 @@ function renderReader(state) {
                 <span>Loading document...</span>
               </div>
             ` : `
+              <div class="reading-progress-track" id="reading-progress-track" aria-hidden="true">
+                <div class="reading-progress-fill" id="reading-progress-fill"
+                     style="width:${Math.round((state.currentPage / Math.max(state.totalPages,1)) * 100)}%"></div>
+              </div>
               <div class="page-container" id="page-container"></div>
             `}
           </div>
@@ -2602,11 +2993,45 @@ function renderSearchOverlay(state) {
 }
 
 function renderAnnotationToolbar(state) {
-  const hasMode = !!state.annotationMode;
+  const mode = state.annotationMode;
+  const color = state.highlightColor;
+  const colors = [
+    { key: 'yellow', bg: 'rgba(250,204,21,0.95)' },
+    { key: 'green',  bg: 'rgba(74,222,128,0.95)' },
+    { key: 'blue',   bg: 'rgba(96,165,250,0.95)' },
+    { key: 'pink',   bg: 'rgba(244,114,182,0.95)' },
+    { key: 'purple', bg: 'rgba(168,85,247,0.95)' },
+  ];
   return `
-    <button class="anno-fab ${hasMode ? 'active' : ''}" id="btn-anno-fab" aria-label="Annotation tools">
-      ${hasMode ? Icons.x : Icons.pen}
-    </button>
+    <div class="anno-bar" id="anno-bar" role="toolbar" aria-label="Annotation tools">
+      <div class="anno-bar-tools">
+        <button class="anno-bar-btn ${mode === 'highlight' ? 'active' : ''}" id="bar-btn-highlight"
+                title="Highlight (H)" aria-label="Highlight" aria-pressed="${mode === 'highlight'}">
+          ${Icons.highlight}
+        </button>
+        <button class="anno-bar-btn ${mode === 'underline' ? 'active' : ''}" id="bar-btn-underline"
+                title="Underline (U)" aria-label="Underline" aria-pressed="${mode === 'underline'}"
+                style="font-size:15px;text-decoration:underline;text-underline-offset:2px;">U</button>
+        <button class="anno-bar-btn ${mode === 'note' ? 'active' : ''}" id="bar-btn-note"
+                title="Note (N)" aria-label="Note" aria-pressed="${mode === 'note'}">
+          ${Icons.note}
+        </button>
+        <button class="anno-bar-btn ${mode === 'pen' ? 'active' : ''}" id="bar-btn-pen"
+                title="Draw (D)" aria-label="Draw" aria-pressed="${mode === 'pen'}">
+          ${Icons.pen}
+        </button>
+        <div class="anno-bar-sep"></div>
+        <div class="anno-bar-colors" role="group" aria-label="Highlight color">
+          ${colors.map(c => `<button class="color-swatch ${color === c.key ? 'active' : ''}"
+              data-color="${c.key}" title="${c.key}" aria-label="${c.key} color" aria-pressed="${color === c.key}"
+              style="background:${c.bg}"></button>`).join('')}
+        </div>
+        <div class="anno-bar-sep"></div>
+        <button class="anno-bar-btn" id="bar-btn-undo" title="Undo last annotation (Ctrl+Z)" aria-label="Undo">
+          ${Icons.undo}
+        </button>
+      </div>
+    </div>
   `;
 }
 
@@ -3241,18 +3666,38 @@ function showSelectionToolbar() {
   if (!selection || selection.isCollapsed) return;
   if (!selection.toString().trim()) return;
 
-  // Get the bounding rect of the selection
   const range = selection.getRangeAt(0);
   const selRect = range.getBoundingClientRect();
   if (selRect.width === 0 && selRect.height === 0) return;
 
+  const state = store.getState();
+  const currentColor = state.highlightColor;
+  const colorDefs = [
+    { key: 'yellow', bg: 'rgba(250,204,21,0.95)' },
+    { key: 'green',  bg: 'rgba(74,222,128,0.95)' },
+    { key: 'blue',   bg: 'rgba(96,165,250,0.95)' },
+    { key: 'pink',   bg: 'rgba(244,114,182,0.95)' },
+    { key: 'purple', bg: 'rgba(168,85,247,0.95)' },
+  ];
+
   const toolbar = document.createElement('div');
   toolbar.className = 'selection-toolbar';
   toolbar.id = 'selection-toolbar';
+  toolbar.style.flexDirection = 'column';
+  toolbar.style.padding = '0';
   toolbar.innerHTML = `
-    <button data-action="highlight" aria-label="Highlight">${Icons.highlight} Highlight</button>
-    <button data-action="note" aria-label="Add note">${Icons.note} Note</button>
-    <button data-action="copy" aria-label="Copy text">${Icons.copy} Copy</button>
+    <div class="sel-tb-actions">
+      <button data-action="highlight" aria-label="Highlight">${Icons.highlight} Highlight</button>
+      <div class="sel-tb-sep"></div>
+      <button data-action="note" aria-label="Add note">${Icons.note} Note</button>
+      <div class="sel-tb-sep"></div>
+      <button data-action="copy" aria-label="Copy">${Icons.copy} Copy</button>
+    </div>
+    <div class="sel-tb-colors">
+      ${colorDefs.map(c => `<button class="sel-color-btn ${currentColor === c.key ? 'active' : ''}"
+          data-action="color" data-color="${c.key}" title="${c.key}" aria-label="${c.key}"
+          style="background:${c.bg}"></button>`).join('')}
+    </div>
   `;
   document.body.appendChild(toolbar);
 
@@ -3260,11 +3705,10 @@ function showSelectionToolbar() {
   const tw = toolbar.offsetWidth;
   const th = toolbar.offsetHeight;
   let left = selRect.left + selRect.width / 2 - tw / 2;
-  let top = selRect.top - th - 8;
+  let top = selRect.top - th - 10;
 
-  // Keep within viewport
   left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
-  if (top < 8) top = selRect.bottom + 8;
+  if (top < 8) top = selRect.bottom + 10;
 
   toolbar.style.left = left + 'px';
   toolbar.style.top = top + 'px';
@@ -3273,10 +3717,18 @@ function showSelectionToolbar() {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     e.stopPropagation();
-    handleSelectionAction(btn.dataset.action);
+    if (btn.dataset.action === 'color') {
+      // Update color and refresh dots
+      const newColor = btn.dataset.color;
+      store.setState({ highlightColor: newColor });
+      toolbar.querySelectorAll('.sel-color-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.color === newColor);
+      });
+    } else {
+      handleSelectionAction(btn.dataset.action);
+    }
   });
 
-  // Dismiss on outside click/scroll
   setTimeout(() => {
     document.addEventListener('pointerdown', _dismissOnOutside);
     document.addEventListener('scroll', _dismissOnScroll, { capture: true });
@@ -3467,6 +3919,7 @@ function setupDrawingForPage(pageNum, wrapper) {
 // ===== EVENT HANDLERS =====
 function attachLibraryEvents() {
   document.getElementById('btn-open-file')?.addEventListener('click', promptFileOpen);
+  document.getElementById('btn-open-empty')?.addEventListener('click', promptFileOpen);
 
   document.getElementById('btn-settings-lib')?.addEventListener('click', () => {
     store.setState({ settingsOpen: true });
@@ -3609,26 +4062,59 @@ function attachReaderEvents() {
     if (item) goToPage(parseInt(item.dataset.page));
   });
 
-  // Annotation FAB (menu is handled via direct DOM in updateAnnoMenu)
-  document.getElementById('btn-anno-fab')?.addEventListener('click', () => {
-    const s = store.getState();
-    if (s.annotationMode) {
-      store.setState({ annotationMode: null, annoMenuOpen: false });
-    } else {
-      store.setState({ annoMenuOpen: !s.annoMenuOpen });
-    }
+  // ===== ANNOTATION BAR events =====
+  document.getElementById('bar-btn-highlight')?.addEventListener('click', () => {
+    toggleAnnotationMode('highlight');
+  });
+  document.getElementById('bar-btn-underline')?.addEventListener('click', () => {
+    toggleAnnotationMode('underline');
+  });
+  document.getElementById('bar-btn-note')?.addEventListener('click', () => {
+    toggleAnnotationMode('note');
+    refreshDrawingCanvases();
+  });
+  document.getElementById('bar-btn-pen')?.addEventListener('click', () => {
+    toggleAnnotationMode('pen');
+    refreshDrawingCanvases();
+  });
+  document.getElementById('bar-btn-undo')?.addEventListener('click', undoAnnotation);
+
+  // Color swatches in anno-bar
+  document.querySelectorAll('#anno-bar .color-swatch').forEach(btn => {
+    btn.addEventListener('click', () => store.setState({ highlightColor: btn.dataset.color }));
   });
 
-  // Scroll-driven lazy rendering
+  // Scroll-driven lazy rendering + auto-hide topbar
   const readingCanvas = document.getElementById('reading-canvas');
   let scrollRaf = null;
+  let lastScrollTop = 0;
   readingCanvas?.addEventListener('scroll', () => {
     if (scrollRaf) cancelAnimationFrame(scrollRaf);
     scrollRaf = requestAnimationFrame(() => {
       updateCurrentPageFromScroll();
       if (store.getState().continuousScroll) renderVisiblePagesLazy();
+      // Auto-hide topbar
+      const st = readingCanvas.scrollTop;
+      const topbar = document.querySelector('.reader-topbar');
+      if (topbar && !topbar.classList.contains('hidden')) {
+        if (st > lastScrollTop && st > 80) {
+          topbar.classList.add('scroll-hidden');
+        } else if (st < lastScrollTop) {
+          topbar.classList.remove('scroll-hidden');
+        }
+      }
+      lastScrollTop = st <= 0 ? 0 : st;
     });
   }, { passive: true });
+
+  // Tap canvas to show topbar if hidden
+  readingCanvas?.addEventListener('click', (e) => {
+    if (e.target.closest('.selection-toolbar, .note-pin, .note-popover')) return;
+    const topbar = document.querySelector('.reader-topbar');
+    if (topbar?.classList.contains('scroll-hidden')) {
+      topbar.classList.remove('scroll-hidden');
+    }
+  });
 
   // Keyboard
   document.addEventListener('keydown', handleKeyboard);
@@ -3664,11 +4150,8 @@ function attachReaderEvents() {
   attachSettingsEvents();
   setupDragDrop();
 
-  // Restore annotation menu if it was open before re-render
-  const currentState = store.getState();
-  if (currentState.annoMenuOpen) {
-    updateAnnoMenu(currentState);
-  }
+  // Sync anno-bar active states after re-render
+  updateAnnoBar(store.getState());
 }
 
 function refreshDrawingCanvases() {
@@ -3700,92 +4183,26 @@ function attachSettingsEvents() {
   });
 }
 
-// ===== ANNOTATION MENU (direct DOM) =====
-function updateAnnoMenu(state) {
-  const existing = document.getElementById('anno-menu');
-  const fab = document.getElementById('btn-anno-fab');
-
-  if (!state.annoMenuOpen) {
-    // Close menu
-    if (existing) existing.remove();
-    if (fab) {
-      fab.classList.toggle('active', !!state.annotationMode);
-      fab.innerHTML = state.annotationMode ? Icons.x : Icons.pen;
+// ===== ANNOTATION BAR (direct DOM updates — no re-render needed) =====
+function updateAnnoBar(state) {
+  // Update tool button active states
+  ['highlight', 'underline', 'note', 'pen'].forEach(m => {
+    const btn = document.getElementById(`bar-btn-${m}`);
+    if (btn) {
+      btn.classList.toggle('active', state.annotationMode === m);
+      btn.setAttribute('aria-pressed', state.annotationMode === m);
     }
-    return;
-  }
-
-  // Open menu — create it
-  if (existing) existing.remove();
-
-  const colors = ['yellow', 'green', 'blue', 'pink', 'purple'];
-  const menu = document.createElement('div');
-  menu.className = 'anno-menu';
-  menu.id = 'anno-menu';
-  menu.innerHTML = `
-    <button class="anno-btn ${state.annotationMode === 'highlight' ? 'active' : ''}"
-            id="btn-anno-highlight" title="Highlight" aria-label="Highlight">${Icons.highlight}</button>
-    <button class="anno-btn ${state.annotationMode === 'underline' ? 'active' : ''}"
-            id="btn-anno-underline" title="Underline" aria-label="Underline" style="text-decoration:underline;font-weight:700;font-size:16px">U</button>
-    <button class="anno-btn ${state.annotationMode === 'note' ? 'active' : ''}"
-            id="btn-anno-note" title="Note" aria-label="Note">${Icons.note}</button>
-    <button class="anno-btn ${state.annotationMode === 'pen' ? 'active' : ''}"
-            id="btn-anno-pen" title="Draw" aria-label="Draw">${Icons.pen}</button>
-    <div class="anno-color-row">
-      ${colors.map(c => `
-        <div class="color-dot ${state.highlightColor === c ? 'active' : ''}"
-             data-color="${c}" title="${c}" aria-label="${c} color"
-             style="background: var(--highlight-${c})"></div>
-      `).join('')}
-    </div>
-    <button class="anno-btn" id="btn-anno-undo" title="Undo" aria-label="Undo">${Icons.undo}</button>
-  `;
-
-  // Insert into the reader shell (same parent as FAB)
-  const shell = fab?.closest('.reader-shell');
-  if (shell) {
-    shell.appendChild(menu);
-  }
-
-  // Attach menu event listeners
-  attachAnnoMenuEvents();
-
-  // Close menu when clicking outside
-  setTimeout(() => {
-    document.addEventListener('click', function _closeAnno(e) {
-      const menu = document.getElementById('anno-menu');
-      const fab = document.getElementById('btn-anno-fab');
-      if (!menu) { document.removeEventListener('click', _closeAnno); return; }
-      if (!menu.contains(e.target) && e.target !== fab && !fab?.contains(e.target)) {
-        store.setState({ annoMenuOpen: false });
-        document.removeEventListener('click', _closeAnno);
-      }
-    });
-  }, 10);
+  });
+  // Update color swatches
+  document.querySelectorAll('#anno-bar .color-swatch').forEach(dot => {
+    dot.classList.toggle('active', dot.dataset.color === state.highlightColor);
+    dot.setAttribute('aria-pressed', dot.dataset.color === state.highlightColor);
+  });
 }
 
-function attachAnnoMenuEvents() {
-  document.getElementById('btn-anno-highlight')?.addEventListener('click', () => {
-    toggleAnnotationMode('highlight');
-    store.setState({ annoMenuOpen: false });
-  });
-  document.getElementById('btn-anno-underline')?.addEventListener('click', () => {
-    toggleAnnotationMode('underline');
-    store.setState({ annoMenuOpen: false });
-  });
-  document.getElementById('btn-anno-note')?.addEventListener('click', () => {
-    toggleAnnotationMode('note');
-    store.setState({ annoMenuOpen: false });
-  });
-  document.getElementById('btn-anno-pen')?.addEventListener('click', () => {
-    toggleAnnotationMode('pen');
-    store.setState({ annoMenuOpen: false });
-    refreshDrawingCanvases();
-  });
-  document.querySelectorAll('#anno-menu [data-color]').forEach(btn => {
-    btn.addEventListener('click', () => store.setState({ highlightColor: btn.dataset.color }));
-  });
-  document.getElementById('btn-anno-undo')?.addEventListener('click', undoAnnotation);
+// Legacy stub kept for compatibility — now a no-op
+function updateAnnoMenu(state) {
+  updateAnnoBar(state);
 }
 
 // ===== MOBILE: PINCH-TO-ZOOM =====
@@ -3903,8 +4320,11 @@ function updateStatusBar(page) {
   if (slider) slider.value = page;
   const pageInfo = document.getElementById('page-info');
   if (pageInfo) pageInfo.innerHTML = `Page <strong>${page}</strong> of ${state.totalPages}`;
+  const pct = Math.round((page / Math.max(state.totalPages, 1)) * 100);
   const readPct = document.getElementById('read-pct');
-  if (readPct) readPct.textContent = `${Math.round((page / Math.max(state.totalPages, 1)) * 100)}% read`;
+  if (readPct) readPct.textContent = `${pct}% read`;
+  const fill = document.getElementById('reading-progress-fill');
+  if (fill) fill.style.width = pct + '%';
 }
 
 // ===== BOOKMARKS =====
@@ -3950,16 +4370,47 @@ function removeBookmark(page) {
   showToast('Bookmark removed');
 }
 
+// ===== THUMBNAIL UTILITIES =====
+function saveThumb(docId, dataUrl) {
+  try { localStorage.setItem('pdfr-thumb-' + docId, dataUrl); } catch(_) {}
+}
+
+function getThumb(docId) {
+  return localStorage.getItem('pdfr-thumb-' + docId) || null;
+}
+
+async function captureLibraryThumb(docId, pdfDoc) {
+  if (!pdfDoc || getThumb(docId)) return; // Already captured
+  try {
+    const page = await pdfDoc.getPage(1);
+    const vp = page.getViewport({ scale: 1 });
+    const scale = 200 / vp.width;
+    const viewport = page.getViewport({ scale });
+    const cvs = document.createElement('canvas');
+    cvs.width = Math.round(viewport.width);
+    cvs.height = Math.round(viewport.height);
+    await page.render({ canvasContext: cvs.getContext('2d'), viewport }).promise;
+    const dataUrl = cvs.toDataURL('image/jpeg', 0.65);
+    saveThumb(docId, dataUrl);
+    // Update any currently visible library card thumbnail
+    const card = document.querySelector(`[data-doc-id="${docId}"] .doc-card-thumb`);
+    if (card) {
+      const placeholder = card.querySelector('.thumb-placeholder');
+      if (placeholder) {
+        placeholder.outerHTML = `<img class="doc-thumb-img" src="${dataUrl}" alt="Page preview">`;
+      }
+    }
+  } catch(_) {}
+}
+
 // ===== ANNOTATIONS =====
 function toggleAnnotationMode(mode) {
   const current = store.getState().annotationMode;
   const newMode = current === mode ? null : mode;
   store.setState({ annotationMode: newMode });
-  // Toggle crosshair cursor when in note mode
+  // Toggle note-mode cursor
   const canvas = document.querySelector('.reading-canvas');
-  if (canvas) {
-    canvas.classList.toggle('note-mode', newMode === 'note');
-  }
+  if (canvas) canvas.classList.toggle('note-mode', newMode === 'note');
 }
 
 function addAnnotation(type, page, data) {
@@ -4140,11 +4591,6 @@ store.subscribe((state, prev) => {
       return;
     }
 
-    // Annotation menu — direct DOM manipulation (no re-render)
-    if (state.annoMenuOpen !== prev.annoMenuOpen) {
-      updateAnnoMenu(state);
-    }
-
     // Focus mode toggle
     if (state.focusMode !== prev.focusMode) {
       const shell = document.querySelector('.app-shell');
@@ -4159,24 +4605,18 @@ store.subscribe((state, prev) => {
       if (zi) zi.textContent = Math.round(state.zoom * 100) + '%';
     }
 
-    // Annotation mode toggle — update FAB icon + menu button active states
-    if (state.annotationMode !== prev.annotationMode) {
-      const fab = document.getElementById('btn-anno-fab');
-      if (fab) {
-        fab.classList.toggle('active', !!state.annotationMode);
-        fab.innerHTML = state.annotationMode ? Icons.x : Icons.pen;
-      }
-      ['highlight', 'underline', 'note', 'pen'].forEach(m => {
-        const btn = document.getElementById(`btn-anno-${m}`);
-        if (btn) btn.classList.toggle('active', state.annotationMode === m);
-      });
+    // Annotation mode or color changed — update anno-bar directly
+    if (state.annotationMode !== prev.annotationMode || state.highlightColor !== prev.highlightColor) {
+      updateAnnoBar(state);
+      // reading-canvas note-mode class
+      const canvas = document.querySelector('.reading-canvas');
+      if (canvas) canvas.classList.toggle('note-mode', state.annotationMode === 'note');
     }
 
-    // Highlight color
-    if (state.highlightColor !== prev.highlightColor) {
-      document.querySelectorAll('[data-color]').forEach(dot => {
-        dot.classList.toggle('active', dot.dataset.color === state.highlightColor);
-      });
+    // Reading progress bar
+    if (state.currentPage !== prev.currentPage || state.totalPages !== prev.totalPages) {
+      const fill = document.getElementById('reading-progress-fill');
+      if (fill) fill.style.width = Math.round((state.currentPage / Math.max(state.totalPages, 1)) * 100) + '%';
     }
 
     // Toast

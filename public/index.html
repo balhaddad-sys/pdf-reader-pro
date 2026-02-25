@@ -3196,7 +3196,7 @@ function setupLongPressHandler() {
 
 // Select the sentence at (x,y), expanding across multiple PDF text spans
 function selectSentenceAt(x, y) {
-  // Find the text node at the point
+  // Find the text node at the press point
   let caretRange;
   if (document.caretRangeFromPoint) {
     caretRange = document.caretRangeFromPoint(x, y);
@@ -3214,89 +3214,173 @@ function selectSentenceAt(x, y) {
   if (node.nodeType !== Node.TEXT_NODE) return null;
 
   const hitSpan = node.parentElement;
-  if (!hitSpan) return null;
+  if (!hitSpan || hitSpan.tagName !== 'SPAN') return null;
 
   const textLayer = hitSpan.closest('.text-layer');
   if (!textLayer) return null;
 
-  // Get all text spans in this text layer, sorted by vertical then horizontal position
-  const allSpans = Array.from(textLayer.querySelectorAll('span')).filter(s => s.textContent.trim());
-  if (allSpans.length === 0) return null;
+  // 1. Collect all spans with their bounding rects (reading them once for performance)
+  const rawSpans = Array.from(textLayer.querySelectorAll('span'));
+  const spanData = [];
+  for (const span of rawSpans) {
+    if (!span.textContent.trim() && !span.textContent.includes(' ')) continue;
+    const r = span.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    spanData.push({ span, rect: r, yMid: r.top + r.height / 2 });
+  }
+  if (spanData.length === 0) return null;
 
-  const hitIndex = allSpans.indexOf(hitSpan);
-  if (hitIndex === -1) return null;
+  // 2. Sort by visual position: top-to-bottom, then left-to-right
+  spanData.sort((a, b) => {
+    const dy = a.yMid - b.yMid;
+    if (Math.abs(dy) > Math.min(a.rect.height, b.rect.height) * 0.4) return dy;
+    return a.rect.left - b.rect.left;
+  });
 
-  // Find spans on the same line (similar vertical position, within 5px)
-  const hitRect = hitSpan.getBoundingClientRect();
-  const hitY = hitRect.top + hitRect.height / 2;
-  const LINE_TOLERANCE = Math.max(hitRect.height * 0.6, 5);
-
-  // Collect spans on the same line
-  let lineStart = hitIndex;
-  let lineEnd = hitIndex;
-
-  // Walk backward to find line start
-  for (let i = hitIndex - 1; i >= 0; i--) {
-    const r = allSpans[i].getBoundingClientRect();
-    const spanY = r.top + r.height / 2;
-    if (Math.abs(spanY - hitY) <= LINE_TOLERANCE) {
-      lineStart = i;
+  // 3. Group into visual lines by clustering similar y positions
+  const lines = [];
+  let currentLine = [spanData[0]];
+  for (let i = 1; i < spanData.length; i++) {
+    const prev = currentLine[currentLine.length - 1];
+    const curr = spanData[i];
+    const tolerance = Math.min(prev.rect.height, curr.rect.height) * 0.5;
+    if (Math.abs(curr.yMid - prev.yMid) <= tolerance) {
+      currentLine.push(curr);
     } else {
+      lines.push(currentLine);
+      currentLine = [curr];
+    }
+  }
+  lines.push(currentLine);
+
+  // 4. Find which line contains the hit span
+  let hitLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].some(d => d.span === hitSpan)) {
+      hitLineIdx = i;
       break;
     }
   }
+  if (hitLineIdx === -1) return null;
 
-  // Walk forward to find line end
-  for (let i = hitIndex + 1; i < allSpans.length; i++) {
-    const r = allSpans[i].getBoundingClientRect();
-    const spanY = r.top + r.height / 2;
-    if (Math.abs(spanY - hitY) <= LINE_TOLERANCE) {
-      lineEnd = i;
-    } else {
+  // 5. Build the full text for the hit line + surrounding lines to find sentence boundaries
+  const hitLine = lines[hitLineIdx];
+  const hitLineText = hitLine.map(d => d.span.textContent).join('');
+
+  // Check if the hit line itself contains sentence-ending punctuation
+  const hasSentenceEnd = /[.!?:;]/.test(hitLineText);
+
+  // For simple lines (headings, short text, table cells), just select the whole line
+  if (!hasSentenceEnd || hitLine.length <= 3) {
+    return selectSpanRange(hitLine[0].span, hitLine[hitLine.length - 1].span);
+  }
+
+  // 6. For lines with punctuation, find the sentence around the press point
+  //    Concatenate text from the hit line, find the character offset of the press
+  const hitData = spanData.find(d => d.span === hitSpan);
+  if (!hitData) return null;
+
+  // Find which span in the line was pressed and approximate character offset
+  let charOffset = 0;
+  let hitSpanStartOffset = 0;
+  for (const d of hitLine) {
+    if (d.span === hitSpan) {
+      hitSpanStartOffset = charOffset;
+      // Approximate offset within the span based on x position
+      const spanText = d.span.textContent;
+      const spanRect = d.rect;
+      const xFraction = Math.max(0, Math.min(1, (x - spanRect.left) / spanRect.width));
+      charOffset += Math.floor(xFraction * spanText.length);
       break;
     }
+    charOffset += d.span.textContent.length;
   }
 
-  // Now expand beyond the line to sentence boundaries
-  // Walk backward from lineStart to find sentence start (. ! ?)
-  let sentStart = lineStart;
-  for (let i = lineStart - 1; i >= 0; i--) {
-    const txt = allSpans[i].textContent;
-    if (/[.!?]\s*$/.test(txt)) break; // previous span ends a sentence
-    sentStart = i;
-    // Don't cross more than 2 lines back
-    const r = allSpans[i].getBoundingClientRect();
-    if (Math.abs((r.top + r.height / 2) - hitY) > LINE_TOLERANCE * 4) break;
+  // Find sentence boundaries in the concatenated line text
+  const sentBounds = findSentenceBounds(hitLineText, charOffset);
+
+  // 7. Map character offsets back to spans
+  let startCharCount = 0;
+  let startSpan = null, endSpan = null;
+  let startOffset = 0, endOffset = 0;
+
+  for (const d of hitLine) {
+    const txt = d.span.textContent;
+    const spanEnd = startCharCount + txt.length;
+
+    if (!startSpan && spanEnd > sentBounds.start) {
+      startSpan = d.span;
+      startOffset = Math.max(0, sentBounds.start - startCharCount);
+    }
+    if (spanEnd >= sentBounds.end) {
+      endSpan = d.span;
+      endOffset = Math.min(txt.length, sentBounds.end - startCharCount);
+      break;
+    }
+    startCharCount += txt.length;
   }
 
-  // Walk forward from lineEnd to find sentence end (. ! ?)
-  let sentEnd = lineEnd;
-  for (let i = lineEnd; i < allSpans.length; i++) {
-    const txt = allSpans[i].textContent;
-    sentEnd = i;
-    if (/[.!?]\s*$/.test(txt)) break; // this span ends the sentence
-    // Don't cross more than 2 lines forward
-    const r = allSpans[i].getBoundingClientRect();
-    if (Math.abs((r.top + r.height / 2) - hitY) > LINE_TOLERANCE * 4) break;
+  if (!startSpan || !endSpan) {
+    // Fallback: select entire line
+    return selectSpanRange(hitLine[0].span, hitLine[hitLine.length - 1].span);
   }
 
-  // Create selection range spanning from first span to last span
-  const startSpan = allSpans[sentStart];
-  const endSpan = allSpans[sentEnd];
-  const startNode = startSpan.firstChild;
-  const endNode = endSpan.firstChild;
-
-  if (!startNode || !endNode) return null;
-
+  // Create the selection
   const selRange = document.createRange();
-  selRange.setStart(startNode, 0);
-  selRange.setEnd(endNode, endNode.textContent.length);
+  selRange.setStart(startSpan.firstChild || startSpan, startOffset);
+  selRange.setEnd(endSpan.firstChild || endSpan, endOffset);
 
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(selRange);
 
-  return selection.toString().trim();
+  const result = selection.toString().trim();
+  return result || null;
+}
+
+// Find sentence start/end in a text string around a character offset
+function findSentenceBounds(text, offset) {
+  const sentenceEnders = /[.!?:;]\s/;
+
+  // Walk backward to find sentence start
+  let start = 0;
+  for (let i = offset - 1; i >= 0; i--) {
+    if (sentenceEnders.test(text.substring(i, i + 2))) {
+      start = i + 2;
+      break;
+    }
+  }
+
+  // Walk forward to find sentence end
+  let end = text.length;
+  for (let i = offset; i < text.length - 1; i++) {
+    if (sentenceEnders.test(text.substring(i, i + 2))) {
+      end = i + 1;
+      break;
+    }
+  }
+
+  // Trim leading whitespace
+  while (start < end && text[start] === ' ') start++;
+
+  return { start, end };
+}
+
+// Helper: select from first span to last span entirely
+function selectSpanRange(startSpan, endSpan) {
+  const startNode = startSpan.firstChild || startSpan;
+  const endNode = endSpan.firstChild || endSpan;
+  if (!startNode || !endNode) return null;
+
+  const selRange = document.createRange();
+  selRange.setStart(startNode, 0);
+  selRange.setEnd(endNode, endNode.textContent ? endNode.textContent.length : 0);
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(selRange);
+
+  return selection.toString().trim() || null;
 }
 
 // Show floating toolbar near the selection

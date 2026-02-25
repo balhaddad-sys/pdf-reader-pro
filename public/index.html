@@ -804,7 +804,6 @@ button:focus-visible {
   right: 0;
   bottom: 0;
   overflow: hidden;
-  opacity: 0.2;
   line-height: 1;
 }
 
@@ -815,8 +814,8 @@ button:focus-visible {
   color: transparent;
 }
 
-.text-layer ::selection {
-  background: var(--accent);
+.text-layer span::selection {
+  background: rgba(59,130,246,0.3);
   color: transparent;
 }
 
@@ -3014,59 +3013,29 @@ function setupTextSelectionHandler() {
   document.addEventListener('mouseup', (e) => {
     const state = store.getState();
     if (state.view !== 'reader') return;
-
-    // Don't handle if pen mode is active
     if (state.annotationMode === 'pen') return;
+    // Don't interfere with toolbar clicks
+    if (e.target.closest('.selection-toolbar, .anno-menu, .anno-fab')) return;
 
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    // Short delay to let long-press handler finish first
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      if (!selection.toString().trim()) return;
 
-    const selectedText = selection.toString().trim();
-    if (!selectedText) return;
+      // Check the selection is inside a text layer
+      const range = selection.getRangeAt(0);
+      const startEl = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+      if (!startEl?.closest('.text-layer')) return;
 
-    const range = selection.getRangeAt(0);
-    const textLayer = range.startContainer.parentElement?.closest('.text-layer');
-    const pageWrapper = textLayer?.closest('.page-wrapper');
-    if (!pageWrapper) return;
-
-    const pageNum = parseInt(pageWrapper.dataset.page);
-    if (!pageNum) return;
-
-    const rects = Array.from(range.getClientRects());
-    const wrapperRect = pageWrapper.getBoundingClientRect();
-    const wW = wrapperRect.width;
-    const wH = wrapperRect.height;
-
-    const relativeRects = rects.filter(r => r.width > 0 && r.height > 0).map(r => ({
-      xPct: (r.left - wrapperRect.left) / wW,
-      yPct: (r.top - wrapperRect.top) / wH,
-      widthPct: r.width / wW,
-      heightPct: r.height / wH,
-    }));
-
-    if (relativeRects.length === 0) return;
-
-    // If an annotation mode is active, apply it directly (original behavior)
-    if (state.annotationMode === 'highlight' || state.annotationMode === 'underline') {
-      addAnnotation(state.annotationMode, pageNum, { text: selectedText, rects: relativeRects });
-      renderHighlightsForPage(pageNum, pageWrapper);
-      showToast('Annotation added');
-      selection.removeAllRanges();
-    } else if (state.annotationMode === 'note') {
-      showNoteDialog(selectedText, (noteText) => {
-        addAnnotation('note', pageNum, { text: selectedText, content: noteText, rects: relativeRects });
-        renderHighlightsForPage(pageNum, pageWrapper);
-        showToast('Note saved');
-      });
-      selection.removeAllRanges();
-    } else {
-      // No mode active — show the floating toolbar so the user can choose
-      // (Don't show if toolbar already visible from long-press)
-      if (!document.getElementById('selection-toolbar')) {
-        const lastRect = rects[rects.length - 1];
-        showSelectionToolbar(lastRect.right, lastRect.top);
+      // If annotation mode is active, apply directly
+      if (state.annotationMode === 'highlight' || state.annotationMode === 'underline' || state.annotationMode === 'note') {
+        handleSelectionAction(state.annotationMode);
+      } else if (!document.getElementById('selection-toolbar')) {
+        // Show toolbar for manual drag-selection
+        showSelectionToolbar();
       }
-    }
+    }, 50);
   });
 }
 
@@ -3112,7 +3081,7 @@ function setupLongPressHandler() {
   let pressY = 0;
   let moved = false;
   let longPressFired = false;
-  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MS = 450;
   const MOVE_THRESHOLD = 10;
 
   function clearPress() {
@@ -3123,13 +3092,11 @@ function setupLongPressHandler() {
     const state = store.getState();
     if (state.view !== 'reader') return;
     if (state.annotationMode === 'pen') return;
+    if (e.target.closest('.selection-toolbar, .anno-menu, .anno-fab, .note-popover, .note-pin, .reader-topbar, .reader-statusbar, .side-panel')) return;
 
     const touch = e.touches ? e.touches[0] : e;
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (!target) return;
-
-    // Only trigger on text layer content
-    if (!target.closest('.text-layer')) return;
+    if (!target || !target.closest('.text-layer')) return;
 
     pressX = touch.clientX;
     pressY = touch.clientY;
@@ -3140,19 +3107,10 @@ function setupLongPressHandler() {
       if (moved) return;
       longPressFired = true;
 
-      // Select the sentence across PDF text spans
-      const selectedText = selectSentenceAt(touch.clientX, touch.clientY);
+      const selectedText = selectLineAt(touch.clientX, touch.clientY);
       if (selectedText) {
-        if (navigator.vibrate) navigator.vibrate(30);
-        // Position toolbar above the selection
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-          const rects = sel.getRangeAt(0).getClientRects();
-          const firstRect = rects[0];
-          if (firstRect) {
-            showSelectionToolbar(firstRect.left + firstRect.width / 2, firstRect.top);
-          }
-        }
+        if (navigator.vibrate) navigator.vibrate(25);
+        showSelectionToolbar();
       }
     }, LONG_PRESS_MS);
   }
@@ -3168,312 +3126,170 @@ function setupLongPressHandler() {
     }
   }
 
-  function handlePressEnd() {
-    clearPress();
-  }
+  function handlePressEnd() { clearPress(); }
 
-  // Suppress native context menu on long press in text layer
+  // Suppress native context menu after our long press
   document.addEventListener('contextmenu', (e) => {
-    if (longPressFired && e.target.closest('.text-layer')) {
-      e.preventDefault();
-    }
+    if (longPressFired) { e.preventDefault(); longPressFired = false; }
   });
 
-  // Touch events
   document.addEventListener('touchstart', handlePressStart, { passive: true });
   document.addEventListener('touchmove', handlePressMove, { passive: true });
   document.addEventListener('touchend', handlePressEnd);
   document.addEventListener('touchcancel', handlePressEnd);
-
-  // Mouse long-press
-  document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    handlePressStart(e);
-  });
+  document.addEventListener('mousedown', (e) => { if (e.button === 0) handlePressStart(e); });
   document.addEventListener('mousemove', handlePressMove);
   document.addEventListener('mouseup', handlePressEnd);
 }
 
-// Select the sentence at (x,y), expanding across multiple PDF text spans
-function selectSentenceAt(x, y) {
-  // Find the text node at the press point
-  let caretRange;
-  if (document.caretRangeFromPoint) {
-    caretRange = document.caretRangeFromPoint(x, y);
-  } else if (document.caretPositionFromPoint) {
-    const pos = document.caretPositionFromPoint(x, y);
-    if (pos) {
-      caretRange = document.createRange();
-      caretRange.setStart(pos.offsetNode, pos.offset);
-      caretRange.collapse(true);
-    }
-  }
-  if (!caretRange) return null;
+// Select the visual line of text at the given point
+function selectLineAt(x, y) {
+  // Find the span at the press point
+  const target = document.elementFromPoint(x, y);
+  if (!target) return null;
 
-  const node = caretRange.startContainer;
-  if (node.nodeType !== Node.TEXT_NODE) return null;
-
-  const hitSpan = node.parentElement;
-  if (!hitSpan || hitSpan.tagName !== 'SPAN') return null;
+  const hitSpan = target.closest('.text-layer span');
+  if (!hitSpan) return null;
 
   const textLayer = hitSpan.closest('.text-layer');
   if (!textLayer) return null;
 
-  // 1. Collect all spans with their bounding rects (reading them once for performance)
-  const rawSpans = Array.from(textLayer.querySelectorAll('span'));
-  const spanData = [];
-  for (const span of rawSpans) {
-    if (!span.textContent.trim() && !span.textContent.includes(' ')) continue;
+  // Get the hit span's vertical center
+  const hitRect = hitSpan.getBoundingClientRect();
+  const hitYCenter = hitRect.top + hitRect.height / 2;
+  const tolerance = hitRect.height * 0.6;
+
+  // Collect all spans on the same visual line
+  const lineSpans = [];
+  const allSpans = textLayer.querySelectorAll('span');
+  for (const span of allSpans) {
+    if (!span.textContent.trim()) continue;
     const r = span.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) continue;
-    spanData.push({ span, rect: r, yMid: r.top + r.height / 2 });
-  }
-  if (spanData.length === 0) return null;
-
-  // 2. Sort by visual position: top-to-bottom, then left-to-right
-  spanData.sort((a, b) => {
-    const dy = a.yMid - b.yMid;
-    if (Math.abs(dy) > Math.min(a.rect.height, b.rect.height) * 0.4) return dy;
-    return a.rect.left - b.rect.left;
-  });
-
-  // 3. Group into visual lines by clustering similar y positions
-  const lines = [];
-  let currentLine = [spanData[0]];
-  for (let i = 1; i < spanData.length; i++) {
-    const prev = currentLine[currentLine.length - 1];
-    const curr = spanData[i];
-    const tolerance = Math.min(prev.rect.height, curr.rect.height) * 0.5;
-    if (Math.abs(curr.yMid - prev.yMid) <= tolerance) {
-      currentLine.push(curr);
-    } else {
-      lines.push(currentLine);
-      currentLine = [curr];
+    if (r.width === 0 || r.height === 0) continue;
+    const yCenter = r.top + r.height / 2;
+    if (Math.abs(yCenter - hitYCenter) <= tolerance) {
+      lineSpans.push({ span, left: r.left });
     }
   }
-  lines.push(currentLine);
 
-  // 4. Find which line contains the hit span
-  let hitLineIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].some(d => d.span === hitSpan)) {
-      hitLineIdx = i;
-      break;
-    }
-  }
-  if (hitLineIdx === -1) return null;
+  if (lineSpans.length === 0) return null;
 
-  // 5. Build the full text for the hit line + surrounding lines to find sentence boundaries
-  const hitLine = lines[hitLineIdx];
-  const hitLineText = hitLine.map(d => d.span.textContent).join('');
+  // Sort by horizontal position (left to right)
+  lineSpans.sort((a, b) => a.left - b.left);
 
-  // Check if the hit line itself contains sentence-ending punctuation
-  const hasSentenceEnd = /[.!?:;]/.test(hitLineText);
+  // Select from first to last span on the line
+  const firstSpan = lineSpans[0].span;
+  const lastSpan = lineSpans[lineSpans.length - 1].span;
+  const firstNode = firstSpan.firstChild;
+  const lastNode = lastSpan.firstChild;
+  if (!firstNode || !lastNode) return null;
 
-  // For simple lines (headings, short text, table cells), just select the whole line
-  if (!hasSentenceEnd || hitLine.length <= 3) {
-    return selectSpanRange(hitLine[0].span, hitLine[hitLine.length - 1].span);
-  }
-
-  // 6. For lines with punctuation, find the sentence around the press point
-  //    Concatenate text from the hit line, find the character offset of the press
-  const hitData = spanData.find(d => d.span === hitSpan);
-  if (!hitData) return null;
-
-  // Find which span in the line was pressed and approximate character offset
-  let charOffset = 0;
-  let hitSpanStartOffset = 0;
-  for (const d of hitLine) {
-    if (d.span === hitSpan) {
-      hitSpanStartOffset = charOffset;
-      // Approximate offset within the span based on x position
-      const spanText = d.span.textContent;
-      const spanRect = d.rect;
-      const xFraction = Math.max(0, Math.min(1, (x - spanRect.left) / spanRect.width));
-      charOffset += Math.floor(xFraction * spanText.length);
-      break;
-    }
-    charOffset += d.span.textContent.length;
-  }
-
-  // Find sentence boundaries in the concatenated line text
-  const sentBounds = findSentenceBounds(hitLineText, charOffset);
-
-  // 7. Map character offsets back to spans
-  let startCharCount = 0;
-  let startSpan = null, endSpan = null;
-  let startOffset = 0, endOffset = 0;
-
-  for (const d of hitLine) {
-    const txt = d.span.textContent;
-    const spanEnd = startCharCount + txt.length;
-
-    if (!startSpan && spanEnd > sentBounds.start) {
-      startSpan = d.span;
-      startOffset = Math.max(0, sentBounds.start - startCharCount);
-    }
-    if (spanEnd >= sentBounds.end) {
-      endSpan = d.span;
-      endOffset = Math.min(txt.length, sentBounds.end - startCharCount);
-      break;
-    }
-    startCharCount += txt.length;
-  }
-
-  if (!startSpan || !endSpan) {
-    // Fallback: select entire line
-    return selectSpanRange(hitLine[0].span, hitLine[hitLine.length - 1].span);
-  }
-
-  // Create the selection
-  const selRange = document.createRange();
-  selRange.setStart(startSpan.firstChild || startSpan, startOffset);
-  selRange.setEnd(endSpan.firstChild || endSpan, endOffset);
+  const range = document.createRange();
+  range.setStart(firstNode, 0);
+  range.setEnd(lastNode, lastNode.textContent.length);
 
   const selection = window.getSelection();
   selection.removeAllRanges();
-  selection.addRange(selRange);
-
-  const result = selection.toString().trim();
-  return result || null;
-}
-
-// Find sentence start/end in a text string around a character offset
-function findSentenceBounds(text, offset) {
-  const sentenceEnders = /[.!?:;]\s/;
-
-  // Walk backward to find sentence start
-  let start = 0;
-  for (let i = offset - 1; i >= 0; i--) {
-    if (sentenceEnders.test(text.substring(i, i + 2))) {
-      start = i + 2;
-      break;
-    }
-  }
-
-  // Walk forward to find sentence end
-  let end = text.length;
-  for (let i = offset; i < text.length - 1; i++) {
-    if (sentenceEnders.test(text.substring(i, i + 2))) {
-      end = i + 1;
-      break;
-    }
-  }
-
-  // Trim leading whitespace
-  while (start < end && text[start] === ' ') start++;
-
-  return { start, end };
-}
-
-// Helper: select from first span to last span entirely
-function selectSpanRange(startSpan, endSpan) {
-  const startNode = startSpan.firstChild || startSpan;
-  const endNode = endSpan.firstChild || endSpan;
-  if (!startNode || !endNode) return null;
-
-  const selRange = document.createRange();
-  selRange.setStart(startNode, 0);
-  selRange.setEnd(endNode, endNode.textContent ? endNode.textContent.length : 0);
-
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(selRange);
+  selection.addRange(range);
 
   return selection.toString().trim() || null;
 }
 
-// Show floating toolbar near the selection
-function showSelectionToolbar(x, y) {
-  // Remove any existing toolbar
+// Show floating toolbar positioned near the current selection
+function showSelectionToolbar() {
   dismissSelectionToolbar();
 
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) return;
+  if (!selection.toString().trim()) return;
 
-  const selectedText = selection.toString().trim();
-  if (!selectedText) return;
+  // Get the bounding rect of the selection
+  const range = selection.getRangeAt(0);
+  const selRect = range.getBoundingClientRect();
+  if (selRect.width === 0 && selRect.height === 0) return;
 
   const toolbar = document.createElement('div');
   toolbar.className = 'selection-toolbar';
   toolbar.id = 'selection-toolbar';
-
   toolbar.innerHTML = `
     <button data-action="highlight" aria-label="Highlight">${Icons.highlight} Highlight</button>
-    <button data-action="underline" aria-label="Underline" style="text-decoration:underline">U̲nderline</button>
     <button data-action="note" aria-label="Add note">${Icons.note} Note</button>
     <button data-action="copy" aria-label="Copy text">${Icons.copy} Copy</button>
   `;
-
   document.body.appendChild(toolbar);
 
-  // Position above the press point, centered
+  // Position above the selection, centered
   const tw = toolbar.offsetWidth;
   const th = toolbar.offsetHeight;
-  let left = x - tw / 2;
-  let top = y - th - 12;
+  let left = selRect.left + selRect.width / 2 - tw / 2;
+  let top = selRect.top - th - 8;
 
   // Keep within viewport
   left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
-  if (top < 8) top = y + 20; // flip below if too close to top
+  if (top < 8) top = selRect.bottom + 8;
 
   toolbar.style.left = left + 'px';
   toolbar.style.top = top + 'px';
 
-  // Handle actions
   toolbar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
-    const action = btn.dataset.action;
-    handleSelectionAction(action, selection);
+    e.stopPropagation();
+    handleSelectionAction(btn.dataset.action);
   });
 
-  // Dismiss on click outside after a short delay
+  // Dismiss on outside click/scroll
   setTimeout(() => {
-    document.addEventListener('click', _dismissOnOutsideClick);
-    document.addEventListener('touchstart', _dismissOnOutsideClick);
-    document.addEventListener('scroll', dismissSelectionToolbar, { once: true, capture: true });
-  }, 50);
+    document.addEventListener('pointerdown', _dismissOnOutside);
+    document.addEventListener('scroll', _dismissOnScroll, { capture: true });
+  }, 100);
 }
 
-function _dismissOnOutsideClick(e) {
+function _dismissOnOutside(e) {
   const toolbar = document.getElementById('selection-toolbar');
-  if (toolbar && !toolbar.contains(e.target)) {
-    dismissSelectionToolbar();
-  }
+  if (toolbar && !toolbar.contains(e.target)) dismissSelectionToolbar();
 }
+function _dismissOnScroll() { dismissSelectionToolbar(); }
 
 function dismissSelectionToolbar() {
   const toolbar = document.getElementById('selection-toolbar');
   if (toolbar) toolbar.remove();
-  document.removeEventListener('click', _dismissOnOutsideClick);
-  document.removeEventListener('touchstart', _dismissOnOutsideClick);
+  document.removeEventListener('pointerdown', _dismissOnOutside);
+  document.removeEventListener('scroll', _dismissOnScroll, { capture: true });
+  // Clear selection to remove blue highlights from text layer
+  window.getSelection()?.removeAllRanges();
 }
 
-function handleSelectionAction(action, selection) {
+function handleSelectionAction(action) {
+  const selection = window.getSelection();
   if (!selection || selection.isCollapsed) { dismissSelectionToolbar(); return; }
 
   const selectedText = selection.toString().trim();
   if (!selectedText) { dismissSelectionToolbar(); return; }
 
   const range = selection.getRangeAt(0);
-  const textLayer = range.startContainer.parentElement?.closest('.text-layer');
+  const startEl = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+  const textLayer = startEl?.closest('.text-layer');
   const pageWrapper = textLayer?.closest('.page-wrapper');
   if (!pageWrapper) { dismissSelectionToolbar(); return; }
 
   const pageNum = parseInt(pageWrapper.dataset.page);
   if (!pageNum) { dismissSelectionToolbar(); return; }
 
-  const rects = Array.from(range.getClientRects());
+  // Get rects relative to the page wrapper, filtering out tiny/empty ones
   const wrapperRect = pageWrapper.getBoundingClientRect();
   const wW = wrapperRect.width;
   const wH = wrapperRect.height;
-  const relativeRects = rects.filter(r => r.width > 0 && r.height > 0).map(r => ({
-    xPct: (r.left - wrapperRect.left) / wW,
-    yPct: (r.top - wrapperRect.top) / wH,
-    widthPct: r.width / wW,
-    heightPct: r.height / wH,
-  }));
+  const rawRects = Array.from(range.getClientRects());
+  const relativeRects = rawRects
+    .filter(r => r.width > 2 && r.height > 2)
+    .map(r => ({
+      xPct: Math.max(0, (r.left - wrapperRect.left) / wW),
+      yPct: Math.max(0, (r.top - wrapperRect.top) / wH),
+      widthPct: Math.min(1, r.width / wW),
+      heightPct: Math.min(1, r.height / wH),
+    }))
+    .filter(r => r.widthPct > 0.001 && r.heightPct > 0.001);
 
   if (relativeRects.length === 0) { dismissSelectionToolbar(); return; }
 
@@ -3483,10 +3299,6 @@ function handleSelectionAction(action, selection) {
     addAnnotation('highlight', pageNum, { text: selectedText, rects: relativeRects });
     renderHighlightsForPage(pageNum, pageWrapper);
     showToast('Highlighted');
-  } else if (action === 'underline') {
-    addAnnotation('underline', pageNum, { text: selectedText, rects: relativeRects });
-    renderHighlightsForPage(pageNum, pageWrapper);
-    showToast('Underlined');
   } else if (action === 'note') {
     showNoteDialog(selectedText, (noteText) => {
       addAnnotation('note', pageNum, { text: selectedText, content: noteText, rects: relativeRects });
@@ -3496,8 +3308,6 @@ function handleSelectionAction(action, selection) {
   } else if (action === 'copy') {
     navigator.clipboard?.writeText(selectedText).then(() => showToast('Copied'));
   }
-
-  selection.removeAllRanges();
 }
 
 // ===== FREEHAND DRAWING =====

@@ -542,6 +542,11 @@ button:focus-visible {
 .topbar-btn:active { background: var(--bg-tertiary); color: var(--text-primary); transform: scale(0.9); }
 .topbar-btn.active { background: var(--accent-soft); color: var(--accent); }
 .topbar-btn.active:active { background: var(--accent-soft); transform: scale(0.9); }
+.topbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+}
 
 .topbar-sep {
   width: 1px;
@@ -2643,6 +2648,115 @@ function showToast(msg) {
   setTimeout(() => store.setState({ toast: null }), 2500);
 }
 
+// ===== ZOOM CONTROLLER =====
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 4;
+const ZOOM_EPSILON = 0.0001;
+const ZOOM_STEP_LEVELS = [0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
+let zoomRenderTimer = null;
+let pendingZoomAnchor = null;
+
+function clampZoom(value) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+}
+
+function normalizeZoom(value) {
+  return Math.round(clampZoom(value) * 1000) / 1000;
+}
+
+function getSteppedZoom(currentZoom, direction) {
+  const current = normalizeZoom(currentZoom);
+  if (direction > 0) {
+    for (const level of ZOOM_STEP_LEVELS) {
+      if (level > current + ZOOM_EPSILON) return level;
+    }
+    return ZOOM_MAX;
+  }
+  for (let i = ZOOM_STEP_LEVELS.length - 1; i >= 0; i--) {
+    const level = ZOOM_STEP_LEVELS[i];
+    if (level < current - ZOOM_EPSILON) return level;
+  }
+  return ZOOM_MIN;
+}
+
+function captureZoomAnchor(container, clientX, clientY) {
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  const localX = Number.isFinite(clientX) ? clientX - rect.left : rect.width / 2;
+  const localY = Number.isFinite(clientY) ? clientY - rect.top : rect.height / 2;
+  const pointX = Math.min(Math.max(localX, 0), rect.width);
+  const pointY = Math.min(Math.max(localY, 0), rect.height);
+  return {
+    xRatio: (container.scrollLeft + pointX) / Math.max(container.scrollWidth, 1),
+    yRatio: (container.scrollTop + pointY) / Math.max(container.scrollHeight, 1),
+    pointX,
+    pointY,
+  };
+}
+
+function restoreZoomAnchor(container, anchor) {
+  if (!container || !anchor) return;
+  requestAnimationFrame(() => {
+    const maxLeft = Math.max(container.scrollWidth - container.clientWidth, 0);
+    const maxTop = Math.max(container.scrollHeight - container.clientHeight, 0);
+    container.scrollLeft = Math.min(Math.max(anchor.xRatio * container.scrollWidth - anchor.pointX, 0), maxLeft);
+    container.scrollTop = Math.min(Math.max(anchor.yRatio * container.scrollHeight - anchor.pointY, 0), maxTop);
+  });
+}
+
+function syncZoomIndicators(zoom = store.getState().zoom) {
+  const label = Math.round(zoom * 100) + '%';
+  const zoomDisplay = document.getElementById('zoom-display');
+  if (zoomDisplay) zoomDisplay.textContent = label;
+  const zoomInfo = document.getElementById('zoom-info');
+  if (zoomInfo) zoomInfo.textContent = label;
+
+  const zoomOutBtn = document.getElementById('btn-zoom-out');
+  const zoomInBtn = document.getElementById('btn-zoom-in');
+  const atMin = zoom <= ZOOM_MIN + ZOOM_EPSILON;
+  const atMax = zoom >= ZOOM_MAX - ZOOM_EPSILON;
+  if (zoomOutBtn) zoomOutBtn.disabled = atMin;
+  if (zoomInBtn) zoomInBtn.disabled = atMax;
+}
+
+function scheduleZoomRender(delayMs = 0) {
+  clearTimeout(zoomRenderTimer);
+  zoomRenderTimer = setTimeout(async () => {
+    const anchor = pendingZoomAnchor;
+    pendingZoomAnchor = null;
+    await renderVisiblePages(true);
+    restoreZoomAnchor(document.getElementById('reading-canvas'), anchor);
+  }, delayMs);
+}
+
+function setZoomLevel(targetZoom, options = {}) {
+  const { renderMode = 'immediate', anchorClientX = null, anchorClientY = null } = options;
+  const state = store.getState();
+  const nextZoom = normalizeZoom(targetZoom);
+
+  if (Math.abs(nextZoom - state.zoom) <= ZOOM_EPSILON) {
+    syncZoomIndicators(nextZoom);
+    return false;
+  }
+
+  pendingZoomAnchor = captureZoomAnchor(document.getElementById('reading-canvas'), anchorClientX, anchorClientY);
+  store.setState({ zoom: nextZoom, fitMode: 'width' });
+  syncZoomIndicators(nextZoom);
+
+  if (renderMode === 'debounced') {
+    scheduleZoomRender(80);
+  } else if (renderMode !== 'none') {
+    scheduleZoomRender(0);
+  }
+  return true;
+}
+
+function nudgeZoom(direction, options = {}) {
+  const current = store.getState().zoom;
+  const target = getSteppedZoom(current, direction);
+  return setZoomLevel(target, options);
+}
+
 function showNoteDialog(selectedText, onSave) {
   const hasQuote = selectedText && selectedText.trim().length > 0;
 
@@ -2979,6 +3093,8 @@ function renderLibrary(state) {
 // ===== READER VIEW =====
 function renderReader(state) {
   const isBookmarked = state.bookmarks[state.currentDoc?.id]?.includes(state.currentPage);
+  const atMinZoom = state.zoom <= ZOOM_MIN + ZOOM_EPSILON;
+  const atMaxZoom = state.zoom >= ZOOM_MAX - ZOOM_EPSILON;
 
   return `
     <div class="app-shell ${state.focusMode ? 'focus-mode' : ''}" data-view="reader">
@@ -2990,9 +3106,9 @@ function renderReader(state) {
           <div class="topbar-sep"></div>
           <div class="topbar-title">${escapeHtml(state.currentDoc?.name || 'Document')}</div>
           <div class="topbar-sep"></div>
-          <button class="topbar-btn" id="btn-zoom-out" title="Zoom Out" aria-label="Zoom Out">${Icons.zoomOut}</button>
+          <button class="topbar-btn" id="btn-zoom-out" title="Zoom Out" aria-label="Zoom Out" ${atMinZoom ? 'disabled' : ''}>${Icons.zoomOut}</button>
           <span id="zoom-display" style="font-size:12px;font-weight:600;color:var(--text-tertiary);min-width:40px;text-align:center;font-variant-numeric:tabular-nums">${Math.round(state.zoom * 100)}%</span>
-          <button class="topbar-btn" id="btn-zoom-in" title="Zoom In" aria-label="Zoom In">${Icons.zoomIn}</button>
+          <button class="topbar-btn" id="btn-zoom-in" title="Zoom In" aria-label="Zoom In" ${atMaxZoom ? 'disabled' : ''}>${Icons.zoomIn}</button>
           <div class="topbar-sep"></div>
           <button class="topbar-btn" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">${Icons.search}</button>
           <button class="topbar-btn" id="btn-download" title="Download PDF" aria-label="Download PDF">${Icons.download}</button>
@@ -3247,8 +3363,10 @@ function renderSettingsModal(state) {
             <div class="setting-row" style="align-items:flex-start;flex-direction:column;gap:8px">
               <div class="setting-label">Zoom Level</div>
               <div class="zoom-presets">
-                ${[{v:'fit',l:'Fit Width'},{v:'0.75',l:'75%'},{v:'1',l:'100%'},{v:'1.25',l:'125%'},{v:'1.5',l:'150%'},{v:'2',l:'200%'}].map(z => {
-                  const isActive = z.v === 'fit' ? state.fitMode === 'width' && state.zoom === 1 : state.fitMode !== 'width' && Math.abs(state.zoom - parseFloat(z.v)) < 0.01;
+                ${[{v:'fit',l:'Fit Width'},{v:'0.5',l:'50%'},{v:'0.75',l:'75%'},{v:'1',l:'100%'},{v:'1.25',l:'125%'},{v:'1.5',l:'150%'},{v:'2',l:'200%'},{v:'3',l:'300%'}].map(z => {
+                  const isActive = z.v === 'fit'
+                    ? state.fitMode === 'width' && Math.abs(state.zoom - 1) < 0.01
+                    : Math.abs(state.zoom - parseFloat(z.v)) < 0.01;
                   return `<button class="zoom-preset-btn ${isActive ? 'active' : ''}" data-zoom-preset="${z.v}">${z.l}</button>`;
                 }).join('')}
               </div>
@@ -4552,25 +4670,11 @@ function attachReaderEvents() {
   });
 
   document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-    const z = Math.min(store.getState().zoom + 0.15, 4);
-    // Update display instantly before render
-    const zd = document.getElementById('zoom-display');
-    if (zd) zd.textContent = Math.round(z * 100) + '%';
-    const zi = document.getElementById('zoom-info');
-    if (zi) zi.textContent = Math.round(z * 100) + '%';
-    store.setState({ zoom: z });
-    renderVisiblePages(true);
+    nudgeZoom(1, { renderMode: 'immediate' });
   });
 
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-    const z = Math.max(store.getState().zoom - 0.15, 0.3);
-    // Update display instantly before render
-    const zd = document.getElementById('zoom-display');
-    if (zd) zd.textContent = Math.round(z * 100) + '%';
-    const zi = document.getElementById('zoom-info');
-    if (zi) zi.textContent = Math.round(z * 100) + '%';
-    store.setState({ zoom: z });
-    renderVisiblePages(true);
+    nudgeZoom(-1, { renderMode: 'immediate' });
   });
 
   document.getElementById('btn-search')?.addEventListener('click', () => {
@@ -4755,6 +4859,20 @@ function attachReaderEvents() {
     }
   });
 
+  // Ctrl/Cmd + wheel zoom around cursor (desktop + trackpad pinch gestures)
+  readingCanvas?.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0025);
+    setZoomLevel(store.getState().zoom * factor, {
+      renderMode: 'debounced',
+      anchorClientX: e.clientX,
+      anchorClientY: e.clientY,
+    });
+  }, { passive: false });
+
+  syncZoomIndicators();
+
   // Keyboard
   document.addEventListener('keydown', handleKeyboard);
 
@@ -4831,11 +4949,10 @@ function attachSettingsEvents() {
     btn.addEventListener('click', () => {
       const v = btn.dataset.zoomPreset;
       if (v === 'fit') {
-        store.setState({ fitMode: 'width', zoom: 1 });
+        setZoomLevel(1, { renderMode: 'immediate' });
       } else {
-        store.setState({ fitMode: 'width', zoom: parseFloat(v) });
+        setZoomLevel(parseFloat(v), { renderMode: 'immediate' });
       }
-      renderVisiblePages(true);
     });
   });
 }
@@ -4867,7 +4984,6 @@ function setupPinchZoom(el) {
   if (!el) return;
   let initialDistance = 0;
   let initialZoom = 1;
-  let zoomTimeout;
   let pinching = false;
 
   // Non-passive handler — only attached while 2 fingers are down
@@ -4879,16 +4995,13 @@ function setupPinchZoom(el) {
       (e.touches[1].clientY - e.touches[0].clientY) ** 2
     );
     const scale = dist / initialDistance;
-    const newZoom = Math.min(4, Math.max(0.3, initialZoom * scale));
-    store.setState({ zoom: newZoom });
-
-    const zd = document.getElementById('zoom-display');
-    if (zd) zd.textContent = Math.round(newZoom * 100) + '%';
-    const zi = document.getElementById('zoom-info');
-    if (zi) zi.textContent = Math.round(newZoom * 100) + '%';
-
-    clearTimeout(zoomTimeout);
-    zoomTimeout = setTimeout(() => renderVisiblePages(true), 100);
+    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    setZoomLevel(initialZoom * scale, {
+      renderMode: 'debounced',
+      anchorClientX: centerX,
+      anchorClientY: centerY,
+    });
   }
 
   el.addEventListener('touchstart', (e) => {
@@ -5191,15 +5304,19 @@ function handleKeyboard(e) {
     case '+': case '=':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        store.setState({ zoom: Math.min(state.zoom + 0.15, 4) });
-        renderVisiblePages(true);
+        nudgeZoom(1, { renderMode: 'immediate' });
       }
       break;
     case '-':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        store.setState({ zoom: Math.max(state.zoom - 0.15, 0.3) });
-        renderVisiblePages(true);
+        nudgeZoom(-1, { renderMode: 'immediate' });
+      }
+      break;
+    case '0':
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setZoomLevel(1, { renderMode: 'immediate' });
       }
       break;
   }
@@ -5273,10 +5390,7 @@ store.subscribe((state, prev) => {
 
     // Zoom display
     if (state.zoom !== prev.zoom) {
-      const zd = document.getElementById('zoom-display');
-      if (zd) zd.textContent = Math.round(state.zoom * 100) + '%';
-      const zi = document.getElementById('zoom-info');
-      if (zi) zi.textContent = Math.round(state.zoom * 100) + '%';
+      syncZoomIndicators(state.zoom);
     }
 
     // Annotation mode or color changed — update anno-bar directly

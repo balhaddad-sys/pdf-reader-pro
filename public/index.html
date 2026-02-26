@@ -1687,7 +1687,9 @@ button:focus-visible {
 
 /* ===== PAGE PLACEHOLDER ===== */
 .page-placeholder {
-  background: var(--bg-canvas);
+  background: linear-gradient(90deg, var(--bg-canvas) 25%, var(--bg-secondary) 50%, var(--bg-canvas) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease infinite;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1695,7 +1697,7 @@ button:focus-visible {
   font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 /* ===== RESPONSIVE ===== */
@@ -3409,13 +3411,21 @@ function renderSidePanelContent(state) {
       </div>`;
     case 'outline':
       if (!state.outline || state.outline.length === 0) {
-        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No outline available for this document</div>`;
+        return `<div style="padding:40px 20px;text-align:center;color:var(--text-tertiary)">
+          <div style="font-size:28px;margin-bottom:8px;opacity:0.4">${Icons.sidebar}</div>
+          <div style="font-size:13px;font-weight:500">No outline available</div>
+          <div style="font-size:12px;margin-top:4px;opacity:0.7">This document doesn't have a table of contents</div>
+        </div>`;
       }
       return renderOutlineItems(state.outline);
     case 'bookmarks':
       const docBookmarks = state.bookmarks[state.currentDoc?.id] || [];
       if (docBookmarks.length === 0) {
-        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No bookmarks yet. Click the bookmark icon to add one.</div>`;
+        return `<div style="padding:40px 20px;text-align:center;color:var(--text-tertiary)">
+          <div style="font-size:28px;margin-bottom:8px;opacity:0.4">${Icons.bookmark}</div>
+          <div style="font-size:13px;font-weight:500">No bookmarks yet</div>
+          <div style="font-size:12px;margin-top:4px;opacity:0.7">Tap ${Icons.bookmark} in the toolbar to bookmark a page</div>
+        </div>`;
       }
       return docBookmarks.map(p => `
         <div class="bookmark-item" data-page="${p}">
@@ -3430,7 +3440,11 @@ function renderSidePanelContent(state) {
     case 'annotations':
       const docAnnos = state.annotations[state.currentDoc?.id] || [];
       if (docAnnos.length === 0) {
-        return `<div style="padding:20px;text-align:center;color:var(--text-tertiary);font-size:13px">No annotations yet. Select the note tool and tap anywhere on a page to add a note, or select text to highlight.</div>`;
+        return `<div style="padding:40px 20px;text-align:center;color:var(--text-tertiary)">
+          <div style="font-size:28px;margin-bottom:8px;opacity:0.4">${Icons.pen}</div>
+          <div style="font-size:13px;font-weight:500">No annotations yet</div>
+          <div style="font-size:12px;margin-top:4px;opacity:0.7">Select text to highlight, or use the annotation tools</div>
+        </div>`;
       }
       return docAnnos.sort((a, b) => a.page - b.page).map(a => {
         const label = a.type === 'note' && a.content ? a.content : (a.text || 'Highlight');
@@ -3863,8 +3877,18 @@ async function renderVisiblePagesLazy() {
 
   // Unload far pages to save memory
   for (const p of pagesToUnload) {
+    // Cancel any in-flight render for this page
+    if (engine.renderTasks.has(p)) {
+      try { engine.renderTasks.get(p).cancel(); } catch(_) {}
+      engine.renderTasks.delete(p);
+    }
     const wrapper = document.getElementById(`page-wrap-${p}`);
     if (wrapper) {
+      // Release canvas memory explicitly
+      wrapper.querySelectorAll('canvas').forEach(c => {
+        const ctx = c.getContext('2d');
+        if (ctx) { c.width = 0; c.height = 0; }
+      });
       const pos = pagePositions[p - 1];
       wrapper.innerHTML = `<div class="page-placeholder" style="width:100%;height:100%">${p}</div>`;
       wrapper.style.width = pos.width + 'px';
@@ -5089,7 +5113,7 @@ function attachReaderEvents() {
   const readingCanvas = document.getElementById('reading-canvas');
   const topbarEl = document.querySelector('.reader-topbar');
   let lastScrollTop = 0;
-  let lazyRenderTimer = null;
+  let scrollRAF = null;
 
   readingCanvas?.addEventListener('scroll', () => {
     // Lightweight: topbar show/hide (no layout queries, just classList)
@@ -5100,13 +5124,13 @@ function attachReaderEvents() {
     }
     lastScrollTop = st <= 0 ? 0 : st;
 
-    // Throttled: page detection + lazy rendering (runs max every 60ms)
-    if (!lazyRenderTimer) {
-      lazyRenderTimer = setTimeout(() => {
-        lazyRenderTimer = null;
+    // rAF-throttled: render on next frame instead of 60ms delay
+    if (!scrollRAF) {
+      scrollRAF = requestAnimationFrame(() => {
+        scrollRAF = null;
         updateCurrentPageFromScroll();
         if (store.getState().continuousScroll) renderVisiblePagesLazy();
-      }, 60);
+      });
     }
   }, { passive: true });
 
@@ -5735,16 +5759,34 @@ store.subscribe((state, prev) => {
       return;
     }
 
-    // Loading progress — update the bar width directly
+    // Loading progress — update the bar width (skip small increments to avoid jank)
     if (state.loadProgress !== prev.loadProgress && state.loading) {
       const bar = document.querySelector('.load-progress-bar');
-      if (bar) bar.style.width = (state.loadProgress || 5) + '%';
+      if (bar) {
+        const pct = state.loadProgress || 5;
+        const current = parseFloat(bar.style.width) || 0;
+        // Only update if progress jumped enough or reached 100
+        if (pct - current >= 3 || pct >= 99) bar.style.width = pct + '%';
+      }
       return;
     }
 
-    // Settings / search modals — full re-render
-    if (state.settingsOpen !== prev.settingsOpen ||
-        state.searchOpen !== prev.searchOpen ||
+    // Settings modal — insert/remove without full re-render
+    if (state.settingsOpen !== prev.settingsOpen) {
+      const shell = document.querySelector('.app-shell');
+      if (state.settingsOpen && shell) {
+        const div = document.createElement('div');
+        div.id = 'settings-mount';
+        div.innerHTML = renderSettingsModal(state);
+        shell.appendChild(div);
+        attachSettingsEvents();
+      } else {
+        document.getElementById('settings-mount')?.remove();
+      }
+    }
+
+    // Search / sidebar tab / ruler — full re-render
+    if (state.searchOpen !== prev.searchOpen ||
         state.sidePanelTab !== prev.sidePanelTab ||
         state.showRuler !== prev.showRuler) {
       renderApp();

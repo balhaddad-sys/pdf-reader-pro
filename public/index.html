@@ -502,13 +502,13 @@ button:focus-visible {
   height: var(--topbar-height);
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   display: flex;
   align-items: center;
   padding: 0 8px;
   gap: 2px;
   flex-shrink: 0;
   z-index: 100;
-  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
 }
 
 .reader-topbar.hidden {
@@ -747,7 +747,7 @@ button:focus-visible {
 .reading-canvas {
   flex: 1;
   overflow: auto;
-  background: #525659;
+  background: #e8e8ec;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -755,8 +755,8 @@ button:focus-visible {
   overscroll-behavior-y: contain;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-[data-theme="dark"] .reading-canvas { background: #3c3f41; }
-[data-theme="sepia"] .reading-canvas { background: #6b5c45; }
+[data-theme="dark"] .reading-canvas { background: #1a1d23; }
+[data-theme="sepia"] .reading-canvas { background: #ddd4c4; }
 
 .page-container {
   padding: 20px;
@@ -769,10 +769,17 @@ button:focus-visible {
   width: 100%;
 }
 
+.page-container.zoom-preview {
+  will-change: transform;
+  transform: scale(var(--zoom-preview-ratio, 1));
+  transform-origin: var(--zoom-anchor-x, 50%) var(--zoom-anchor-y, 50%);
+  transition: transform 45ms linear;
+}
+
 .page-wrapper {
   position: relative;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08);
-  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+  border-radius: 3px;
   overflow: hidden;
   background: white;
   flex-shrink: 0;
@@ -780,7 +787,7 @@ button:focus-visible {
 }
 @media (min-width: 769px) {
   .page-wrapper {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.06);
   }
 }
 
@@ -794,9 +801,10 @@ button:focus-visible {
 .page-number-label {
   text-align: center;
   font-size: 11px;
-  color: rgba(255,255,255,0.45);
+  color: var(--text-tertiary);
   padding: 4px 0 8px;
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
 /* Text selection layer */
@@ -976,6 +984,7 @@ button:focus-visible {
   height: var(--statusbar-height);
   background: var(--bg-primary);
   border-top: 1px solid var(--border);
+  box-shadow: 0 -1px 3px rgba(0,0,0,0.03);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1453,9 +1462,9 @@ button:focus-visible {
 }
 
 .focus-mode .reading-canvas {
-  background: #1a1a1a;
+  background: #111113;
 }
-[data-theme="sepia"] .focus-mode .reading-canvas { background: #3d2e1e; }
+[data-theme="sepia"] .focus-mode .reading-canvas { background: #2a2117; }
 
 .focus-mode .page-container {
   padding-top: 40px;
@@ -1570,10 +1579,9 @@ button:focus-visible {
 }
 .load-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  background: var(--accent);
   transition: width 0.4s cubic-bezier(0.2,0,0,1);
   border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 /* ===== SIDEBAR BACKDROP (mobile) ===== */
@@ -1587,17 +1595,16 @@ button:focus-visible {
 
 /* ===== PAGE PLACEHOLDER ===== */
 .page-placeholder {
-  background: #e8e8e8;
-  border-radius: 2px;
+  background: var(--bg-canvas);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(0,0,0,0.2);
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
 }
-[data-theme="dark"] .page-placeholder { background: #3a3a3a; color: rgba(255,255,255,0.15); }
-[data-theme="sepia"] .page-placeholder { background: #e8dcc8; color: rgba(0,0,0,0.15); }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
@@ -1644,7 +1651,7 @@ button:focus-visible {
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
   .reader-topbar::-webkit-scrollbar { display: none; }
   .topbar-btn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
@@ -1654,8 +1661,8 @@ button:focus-visible {
 
   /* Reading canvas: less padding */
   .page-container { padding: 8px; gap: 12px; }
-  /* Remove expensive box-shadow paint during scroll on mobile */
-  .page-wrapper { box-shadow: none; border: 1px solid rgba(0,0,0,0.08); }
+  /* Lightweight page edge on mobile (no box-shadow paint cost) */
+  .page-wrapper { box-shadow: none; }
 
   /* Search overlay: full width */
   .search-overlay {
@@ -1735,6 +1742,11 @@ button:focus-visible {
 }
 
 /* ===== AUTO-HIDE TOPBAR ===== */
+/* transform + opacity are GPU-composited — zero layout cost */
+.reader-topbar {
+  transition: transform 0.28s cubic-bezier(0.2,0,0,1), opacity 0.28s cubic-bezier(0.2,0,0,1);
+  will-change: transform;
+}
 .reader-topbar.scroll-hidden {
   transform: translateY(-100%);
   opacity: 0;
@@ -1745,8 +1757,8 @@ button:focus-visible {
 
 /* ===== READING PROGRESS BAR ===== */
 .reading-progress-track {
-  height: 3px;
-  background: var(--border);
+  height: 2px;
+  background: transparent;
   flex-shrink: 0;
   overflow: hidden;
   position: sticky;
@@ -1758,16 +1770,16 @@ button:focus-visible {
 .reading-progress-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 1px 1px 0;
   min-width: 0;
+  opacity: 0.7;
 }
 
 /* ===== ANNOTATION BAR (bottom toolbar) ===== */
 .anno-bar {
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px) saturate(200%);
-  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  background: var(--bg-primary);
   border-top: 1px solid var(--border);
+  box-shadow: 0 -1px 3px rgba(0,0,0,0.03);
   padding: 7px 12px;
   padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -1775,7 +1787,6 @@ button:focus-visible {
   justify-content: center;
   z-index: 300;
   flex-shrink: 0;
-  transition: transform var(--transition-smooth), opacity var(--transition-smooth);
 }
 .focus-mode .anno-bar { transform: translateY(100%); opacity: 0; pointer-events: none; }
 
@@ -2655,6 +2666,7 @@ const ZOOM_EPSILON = 0.0001;
 const ZOOM_STEP_LEVELS = [0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
 let zoomRenderTimer = null;
 let pendingZoomAnchor = null;
+let committedZoomLevel = 1;
 
 function clampZoom(value) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
@@ -2662,6 +2674,10 @@ function clampZoom(value) {
 
 function normalizeZoom(value) {
   return Math.round(clampZoom(value) * 1000) / 1000;
+}
+
+function setCommittedZoom(value) {
+  committedZoomLevel = normalizeZoom(value);
 }
 
 function getSteppedZoom(currentZoom, direction) {
@@ -2704,6 +2720,33 @@ function restoreZoomAnchor(container, anchor) {
   });
 }
 
+function applyZoomPreview(nextZoom, anchor) {
+  const pageContainer = document.getElementById('page-container');
+  const readingCanvas = document.getElementById('reading-canvas');
+  if (!pageContainer || !readingCanvas) return;
+
+  const baseZoom = Math.max(committedZoomLevel, ZOOM_MIN);
+  const ratio = Math.min(8, Math.max(0.2, nextZoom / baseZoom));
+  pageContainer.classList.add('zoom-preview');
+  pageContainer.style.setProperty('--zoom-preview-ratio', ratio.toFixed(4));
+
+  if (anchor) {
+    const anchorXPct = (anchor.pointX / Math.max(readingCanvas.clientWidth, 1)) * 100;
+    const anchorYPct = (anchor.pointY / Math.max(readingCanvas.clientHeight, 1)) * 100;
+    pageContainer.style.setProperty('--zoom-anchor-x', anchorXPct.toFixed(2) + '%');
+    pageContainer.style.setProperty('--zoom-anchor-y', anchorYPct.toFixed(2) + '%');
+  }
+}
+
+function clearZoomPreview() {
+  const pageContainer = document.getElementById('page-container');
+  if (!pageContainer) return;
+  pageContainer.classList.remove('zoom-preview');
+  pageContainer.style.removeProperty('--zoom-preview-ratio');
+  pageContainer.style.removeProperty('--zoom-anchor-x');
+  pageContainer.style.removeProperty('--zoom-anchor-y');
+}
+
 function syncZoomIndicators(zoom = store.getState().zoom) {
   const label = Math.round(zoom * 100) + '%';
   const zoomDisplay = document.getElementById('zoom-display');
@@ -2719,18 +2762,26 @@ function syncZoomIndicators(zoom = store.getState().zoom) {
   if (zoomInBtn) zoomInBtn.disabled = atMax;
 }
 
-function scheduleZoomRender(delayMs = 0) {
+function scheduleZoomRender(delayMs = 0, forceRebuild = false) {
   clearTimeout(zoomRenderTimer);
   zoomRenderTimer = setTimeout(async () => {
+    const state = store.getState();
+    if (state.view !== 'reader' || !state.pdfDoc || state.loading) {
+      pendingZoomAnchor = null;
+      clearZoomPreview();
+      return;
+    }
     const anchor = pendingZoomAnchor;
     pendingZoomAnchor = null;
-    await renderVisiblePages(true);
+    clearZoomPreview();
+    await renderVisiblePages(forceRebuild);
+    setCommittedZoom(store.getState().zoom);
     restoreZoomAnchor(document.getElementById('reading-canvas'), anchor);
   }, delayMs);
 }
 
 function setZoomLevel(targetZoom, options = {}) {
-  const { renderMode = 'immediate', anchorClientX = null, anchorClientY = null } = options;
+  const { renderMode = 'immediate', anchorClientX = null, anchorClientY = null, forceRebuild = false } = options;
   const state = store.getState();
   const nextZoom = normalizeZoom(targetZoom);
 
@@ -2739,14 +2790,17 @@ function setZoomLevel(targetZoom, options = {}) {
     return false;
   }
 
-  pendingZoomAnchor = captureZoomAnchor(document.getElementById('reading-canvas'), anchorClientX, anchorClientY);
+  const anchor = captureZoomAnchor(document.getElementById('reading-canvas'), anchorClientX, anchorClientY);
+  pendingZoomAnchor = anchor;
+  if (renderMode === 'debounced') applyZoomPreview(nextZoom, anchor);
+  else clearZoomPreview();
   store.setState({ zoom: nextZoom, fitMode: 'width' });
   syncZoomIndicators(nextZoom);
 
   if (renderMode === 'debounced') {
-    scheduleZoomRender(80);
+    scheduleZoomRender(140, forceRebuild);
   } else if (renderMode !== 'none') {
-    scheduleZoomRender(0);
+    scheduleZoomRender(0, forceRebuild);
   }
   return true;
 }
@@ -2967,6 +3021,9 @@ function renderApp() {
   const state = store.getState();
   const root = document.getElementById('root');
   currentView = state.view;
+  clearTimeout(zoomRenderTimer);
+  pendingZoomAnchor = null;
+  clearZoomPreview();
 
   if (state.view === 'library') {
     root.innerHTML = renderLibrary(state);
@@ -4860,17 +4917,33 @@ function attachReaderEvents() {
   });
 
   // Ctrl/Cmd + wheel zoom around cursor (desktop + trackpad pinch gestures)
+  let wheelZoomRAF = null;
+  let wheelZoomDelta = 0;
+  let wheelAnchorX = null;
+  let wheelAnchorY = null;
+  const flushWheelZoom = () => {
+    wheelZoomRAF = null;
+    if (Math.abs(wheelZoomDelta) < 0.01) return;
+    const factor = Math.exp(-wheelZoomDelta * 0.00145);
+    wheelZoomDelta = 0;
+    setZoomLevel(store.getState().zoom * factor, {
+      renderMode: 'debounced',
+      anchorClientX: wheelAnchorX,
+      anchorClientY: wheelAnchorY,
+    });
+  };
+
   readingCanvas?.addEventListener('wheel', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0025);
-    setZoomLevel(store.getState().zoom * factor, {
-      renderMode: 'debounced',
-      anchorClientX: e.clientX,
-      anchorClientY: e.clientY,
-    });
+    const unit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? Math.max(readingCanvas.clientHeight, 1) : 1);
+    wheelZoomDelta += e.deltaY * unit;
+    wheelAnchorX = e.clientX;
+    wheelAnchorY = e.clientY;
+    if (!wheelZoomRAF) wheelZoomRAF = requestAnimationFrame(flushWheelZoom);
   }, { passive: false });
 
+  setCommittedZoom(store.getState().zoom);
   syncZoomIndicators();
 
   // Keyboard
@@ -4985,6 +5058,19 @@ function setupPinchZoom(el) {
   let initialDistance = 0;
   let initialZoom = 1;
   let pinching = false;
+  let pinchRAF = null;
+  let queuedScale = 1;
+  let queuedCenterX = 0;
+  let queuedCenterY = 0;
+
+  function flushPinchZoom() {
+    pinchRAF = null;
+    setZoomLevel(initialZoom * queuedScale, {
+      renderMode: 'debounced',
+      anchorClientX: queuedCenterX,
+      anchorClientY: queuedCenterY,
+    });
+  }
 
   // Non-passive handler — only attached while 2 fingers are down
   function onPinchMove(e) {
@@ -4994,14 +5080,22 @@ function setupPinchZoom(el) {
       (e.touches[1].clientX - e.touches[0].clientX) ** 2 +
       (e.touches[1].clientY - e.touches[0].clientY) ** 2
     );
-    const scale = dist / initialDistance;
-    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    setZoomLevel(initialZoom * scale, {
-      renderMode: 'debounced',
-      anchorClientX: centerX,
-      anchorClientY: centerY,
-    });
+    if (initialDistance <= 0) return;
+    queuedScale = dist / initialDistance;
+    queuedCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    queuedCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    if (!pinchRAF) pinchRAF = requestAnimationFrame(flushPinchZoom);
+  }
+
+  function stopPinch() {
+    if (!pinching) return;
+    pinching = false;
+    if (pinchRAF) {
+      cancelAnimationFrame(pinchRAF);
+      pinchRAF = null;
+      flushPinchZoom();
+    }
+    el.removeEventListener('touchmove', onPinchMove);
   }
 
   el.addEventListener('touchstart', (e) => {
@@ -5012,21 +5106,18 @@ function setupPinchZoom(el) {
         (e.touches[1].clientY - e.touches[0].clientY) ** 2
       );
       initialZoom = store.getState().zoom;
+      queuedScale = 1;
+      queuedCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      queuedCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       el.addEventListener('touchmove', onPinchMove, { passive: false });
     }
   }, { passive: true });
 
-  el.addEventListener('touchend', () => {
-    if (pinching) {
-      pinching = false;
-      el.removeEventListener('touchmove', onPinchMove);
-    }
+  el.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) stopPinch();
   }, { passive: true });
   el.addEventListener('touchcancel', () => {
-    if (pinching) {
-      pinching = false;
-      el.removeEventListener('touchmove', onPinchMove);
-    }
+    stopPinch();
   }, { passive: true });
 }
 

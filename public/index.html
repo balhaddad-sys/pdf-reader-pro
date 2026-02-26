@@ -342,8 +342,6 @@ button:focus-visible {
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
-  transition: all var(--transition-smooth);
-  animation: slideUp 0.4s cubic-bezier(0.2,0,0,1) both;
   position: relative;
 }
 
@@ -502,9 +500,7 @@ button:focus-visible {
 /* Top Bar */
 .reader-topbar {
   height: var(--topbar-height);
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -535,7 +531,7 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -751,9 +747,6 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
   overscroll-behavior-y: contain;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -976,9 +969,7 @@ button:focus-visible {
 /* Status Bar */
 .reader-statusbar {
   height: var(--statusbar-height);
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background: var(--bg-primary);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -990,7 +981,6 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   z-index: 100;
-  transition: opacity var(--transition-smooth);
 }
 
 .reader-statusbar.hidden { opacity: 0; pointer-events: none; }
@@ -1659,6 +1649,8 @@ button:focus-visible {
 
   /* Reading canvas: less padding */
   .page-container { padding: 8px; gap: 12px; }
+  /* Remove expensive box-shadow paint during scroll on mobile */
+  .page-wrapper { box-shadow: none; border: 1px solid rgba(0,0,0,0.08); }
 
   /* Search overlay: full width */
   .search-overlay {
@@ -1738,14 +1730,12 @@ button:focus-visible {
 }
 
 /* ===== AUTO-HIDE TOPBAR ===== */
-.reader-topbar {
-  transition: opacity var(--transition-smooth), transform var(--transition-smooth), margin-top var(--transition-smooth) !important;
-}
 .reader-topbar.scroll-hidden {
   transform: translateY(-100%);
-  margin-top: calc(-1 * var(--topbar-height));
   opacity: 0;
   pointer-events: none;
+  position: absolute;
+  top: 0; left: 0; right: 0;
 }
 
 /* ===== READING PROGRESS BAR ===== */
@@ -1762,9 +1752,8 @@ button:focus-visible {
 }
 .reading-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  background: var(--accent);
   border-radius: 0 2px 2px 0;
-  transition: width 0.5s ease;
   min-width: 0;
 }
 
@@ -2567,35 +2556,11 @@ class PDFEngine {
       span.textContent = item.str;
 
       if (item.width > 0) {
-        const targetW = item.width * scale;
-        span.style.width = targetW + 'px';
-        span.dataset.targetW = targetW;
+        span.style.width = (item.width * scale) + 'px';
       }
       textLayer.appendChild(span);
     }
     container.appendChild(textLayer);
-
-    // Adjust scaleX to match PDF glyph widths
-    // IMPORTANT: batch all reads first, then all writes to avoid layout thrashing
-    requestAnimationFrame(() => {
-      const spans = textLayer.querySelectorAll('span');
-      const adjustments = [];
-      // Batch READ pass (one reflow)
-      for (const span of spans) {
-        if (span.dataset.targetW && span.textContent.trim()) {
-          const targetW = parseFloat(span.dataset.targetW);
-          const actualW = span.getBoundingClientRect().width;
-          if (actualW > 0 && Math.abs(targetW - actualW) > 1) {
-            adjustments.push({ span, scaleX: targetW / actualW });
-          }
-        }
-      }
-      // Batch WRITE pass (no reflow during writes)
-      for (const { span, scaleX } of adjustments) {
-        span.style.transform = `scaleX(${scaleX})`;
-        delete span.dataset.targetW;
-      }
-    });
   }
 
   async renderThumbnail(pageNum, canvas, width = 120) {

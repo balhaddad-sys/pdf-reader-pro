@@ -72,6 +72,10 @@
   --transition-fast: 120ms cubic-bezier(0.2,0,0,1);
   --transition-smooth: 250ms cubic-bezier(0.2,0,0,1);
   --transition-spring: 400ms cubic-bezier(0.34,1.56,0.64,1);
+  --ios-spring: cubic-bezier(0.34,1.56,0.64,1);
+  --ios-ease: cubic-bezier(0.25,0.1,0.25,1);
+  --press-scale: 0.96;
+  --press-duration: 180ms;
 }
 
 [data-theme="dark"] {
@@ -115,9 +119,10 @@
   --shadow-page: 0 2px 12px rgba(61,47,32,0.08);
 }
 
-html, body { 
-  height: 100%; 
-  overflow: hidden; 
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   font-family: var(--font-ui);
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -129,10 +134,13 @@ html, body {
 
 ::selection { background: var(--accent-soft); color: var(--accent); }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* iOS-style auto-hiding scrollbars */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; opacity: 0.5; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background 0.3s; }
+*:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+[data-theme="dark"] *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+[data-theme="sepia"] *:hover::-webkit-scrollbar-thumb { background: rgba(61,47,32,0.15); }
 
 input, button, textarea { font-family: inherit; }
 
@@ -150,7 +158,69 @@ button:focus-visible {
   border-radius: var(--radius-sm);
 }
 
+/* ===== iOS PRESS STATES ===== */
+.topbar-btn,
+.lib-btn-primary,
+.lib-btn-secondary,
+.status-nav-btn,
+.anno-bar-btn,
+.anno-fab,
+.anno-btn,
+.sp-tab,
+.lib-tab,
+.doc-card,
+.theme-option,
+.toggle,
+.zoom-preset-btn,
+.page-jump-display,
+.bookmark-item,
+.search-result-item,
+.outline-item,
+.thumb-item {
+  transition: transform var(--press-duration) var(--ios-spring),
+              opacity var(--press-duration) var(--ios-ease),
+              background var(--transition-fast),
+              color var(--transition-fast),
+              border-color var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+.topbar-btn:active,
+.lib-btn-secondary:active,
+.status-nav-btn:active,
+.anno-bar-btn:active,
+.anno-btn:active,
+.sp-tab:active,
+.lib-tab:active,
+.theme-option:active,
+.toggle:active,
+.zoom-preset-btn:active,
+.page-jump-display:active,
+.bookmark-item:active,
+.search-result-item:active,
+.outline-item:active,
+.thumb-item:active {
+  transform: scale(var(--press-scale));
+  opacity: 0.7;
+}
+.lib-btn-primary:active {
+  transform: scale(var(--press-scale));
+  opacity: 0.85;
+}
+.doc-card:active {
+  transform: scale(0.975);
+  opacity: 0.85;
+}
+.anno-fab:active {
+  transform: scale(0.90);
+  opacity: 0.8;
+}
+.color-swatch:active,
+.sel-color-btn:active {
+  transform: scale(0.80);
+}
+
 /* ===== ANIMATIONS ===== */
+@keyframes viewFadeIn { from { opacity:0; transform:scale(1.015); } to { opacity:1; transform:scale(1); } }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 @keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
 @keyframes slideRight { from { opacity:0; transform:translateX(-16px); } to { opacity:1; transform:translateX(0); } }
@@ -160,10 +230,12 @@ button:focus-visible {
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
 @keyframes glow { 0%,100%{box-shadow:0 0 0 0 var(--accent-glow);} 50%{box-shadow:0 0 0 8px transparent;} }
+@keyframes toastIn { 0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(0.92);} 100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1);} }
 
 .animate-fade { animation: fadeIn 0.25s cubic-bezier(0.2,0,0,1); }
 .animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.2,0,0,1); }
 .animate-scale { animation: scaleIn 0.2s cubic-bezier(0.2,0,0,1); }
+.view-entering { animation: viewFadeIn 0.3s var(--ios-ease) both; }
 
 /* ===== APP SHELL ===== */
 .app-shell {
@@ -241,7 +313,6 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -254,7 +325,6 @@ button:focus-visible {
 }
 
 .lib-btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px var(--accent-glow); }
-.lib-btn-primary:active { background: var(--accent-hover); transform: scale(0.97); box-shadow: none; }
 
 .lib-btn-secondary {
   background: var(--bg-secondary);
@@ -264,7 +334,6 @@ button:focus-visible {
 }
 
 .lib-btn-secondary:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-.lib-btn-secondary:active { background: var(--bg-tertiary); transform: scale(0.95); }
 
 .library-search {
   position: relative;
@@ -343,18 +412,15 @@ button:focus-visible {
   overflow: hidden;
   cursor: pointer;
   position: relative;
+  animation: slideUp 0.4s var(--ios-spring) both;
 }
 
 @media (hover: hover) {
   .doc-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-3px) scale(1.01);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(59,130,246,0.2);
+    border-color: rgba(59,130,246,0.15);
   }
-}
-
-.doc-card:active {
-  transform: scale(0.98);
 }
 
 .doc-card-thumb {
@@ -531,7 +597,6 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -539,9 +604,7 @@ button:focus-visible {
 }
 
 .topbar-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.topbar-btn:active { background: var(--bg-tertiary); color: var(--text-primary); transform: scale(0.9); }
 .topbar-btn.active { background: var(--accent-soft); color: var(--accent); }
-.topbar-btn.active:active { background: var(--accent-soft); transform: scale(0.9); }
 .topbar-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -587,7 +650,17 @@ button:focus-visible {
   flex-direction: column;
   overflow: hidden;
   flex-shrink: 0;
-  animation: slideRight 0.25s cubic-bezier(0.2,0,0,1);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  z-index: 150;
+}
+.side-panel.open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .side-panel-tabs {
@@ -603,12 +676,10 @@ button:focus-visible {
   font-weight: 600;
   color: var(--text-tertiary);
   border-bottom: 2px solid transparent;
-  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
 .sp-tab:hover { color: var(--text-secondary); }
-.sp-tab:active { transform: scale(0.95); }
 .sp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .side-panel-content {
@@ -752,7 +823,8 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 [data-theme="dark"] .reading-canvas { background: #1a1d23; }
@@ -957,8 +1029,8 @@ button:focus-visible {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 4px;
-  animation: scaleIn 0.15s cubic-bezier(0.2,0,0,1);
-  transition: opacity 0.15s ease;
+  animation: scaleIn 0.25s var(--ios-spring);
+  transition: opacity 0.2s var(--ios-ease);
 }
 .selection-toolbar button {
   display: flex;
@@ -997,7 +1069,7 @@ button:focus-visible {
   z-index: 100;
 }
 
-.reader-statusbar.hidden { opacity: 0; pointer-events: none; }
+.reader-statusbar.hidden { opacity: 0; pointer-events: none; transform: translateY(100%); }
 
 .status-left, .status-right { display: flex; align-items: center; gap: 8px; }
 
@@ -1009,13 +1081,11 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 .status-nav-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.status-nav-btn:active { background: var(--bg-tertiary); transform: scale(0.88); }
 .status-nav-btn:disabled { opacity: 0.3; pointer-events: none; }
 
 .page-jump-display {
@@ -1109,7 +1179,7 @@ button:focus-visible {
   z-index: 200;
   display: flex;
   flex-direction: column;
-  animation: scaleIn 0.2s cubic-bezier(0.2,0,0,1);
+  animation: scaleIn 0.25s var(--ios-spring);
   overflow: hidden;
 }
 
@@ -1190,13 +1260,11 @@ button:focus-visible {
   justify-content: center;
   box-shadow: 0 4px 14px var(--accent-glow), 0 2px 6px rgba(0,0,0,0.1);
   z-index: 300;
-  transition: all var(--transition-fast);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 .anno-fab:hover { transform: scale(1.06); box-shadow: 0 6px 20px var(--accent-glow), 0 3px 10px rgba(0,0,0,0.1); }
-.anno-fab:active { transform: scale(0.92); box-shadow: 0 2px 6px var(--accent-glow); }
 .anno-fab.active { background: var(--text-primary); box-shadow: var(--shadow-lg); }
 
 .anno-menu {
@@ -1212,7 +1280,7 @@ button:focus-visible {
   gap: 2px;
   box-shadow: var(--shadow-xl);
   z-index: 300;
-  animation: slideUp 0.2s cubic-bezier(0.2,0,0,1);
+  animation: slideUp 0.25s var(--ios-spring);
   min-width: 52px;
 }
 
@@ -1224,16 +1292,13 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
   position: relative;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .anno-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.anno-btn:active { background: var(--bg-tertiary); transform: scale(0.92); }
 .anno-btn.active { background: var(--accent-soft); color: var(--accent); }
-.anno-btn.active:active { transform: scale(0.92); }
 
 .anno-color-row {
   display: flex;
@@ -1384,7 +1449,6 @@ button:focus-visible {
 }
 
 .toggle.active { background: var(--accent); }
-.toggle:active { transform: scale(0.95); }
 
 .toggle::after {
   content: '';
@@ -1444,7 +1508,6 @@ button:focus-visible {
 }
 
 .theme-option:hover { border-color: var(--text-tertiary); }
-.theme-option:active { transform: scale(0.95); }
 .theme-option.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .theme-light { background: #f8f9fb; color: #0f172a; }
@@ -1452,11 +1515,33 @@ button:focus-visible {
 .theme-sepia { background: #f5efe6; color: #3c2f20; }
 
 /* ===== FOCUS MODE ===== */
-.focus-mode .reader-topbar,
-.focus-mode .reader-statusbar,
+.reader-topbar,
+.reader-statusbar,
+.side-panel {
+  transition: opacity 0.35s var(--ios-ease),
+              transform 0.35s var(--ios-ease);
+}
+
+.reading-canvas {
+  transition: background 0.4s var(--ios-ease);
+}
+
+.focus-mode .reader-topbar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-100%);
+}
+
+.focus-mode .reader-statusbar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(100%);
+}
+
 .focus-mode .side-panel {
   opacity: 0;
   pointer-events: none;
+  transform: translateX(-100%);
 }
 
 .focus-mode .reading-canvas {
@@ -1493,21 +1578,24 @@ button:focus-visible {
 /* ===== TOAST ===== */
 .toast {
   position: fixed;
-  bottom: 100px;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   background: var(--text-primary);
   color: var(--bg-canvas);
-  padding: 12px 24px;
+  padding: 10px 20px;
   border-radius: var(--radius-full);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.1px;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
   z-index: 600;
-  animation: slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  animation: toastIn 0.45s var(--ios-spring);
   pointer-events: none;
   white-space: nowrap;
+  max-width: calc(100vw - 48px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===== READING RULER ===== */
@@ -1588,7 +1676,13 @@ button:focus-visible {
   inset: 0;
   background: rgba(0,0,0,0.3);
   z-index: 149;
-  animation: fadeIn 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s var(--ios-ease);
+}
+.sidebar-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ===== PAGE PLACEHOLDER ===== */
@@ -1814,7 +1908,6 @@ button:focus-visible {
   position: relative;
 }
 .anno-bar-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.anno-bar-btn:active { background: var(--bg-tertiary); transform: scale(0.88); }
 .anno-bar-btn.active { background: var(--accent-soft); color: var(--accent); }
 .anno-bar-btn.active svg { stroke: var(--accent); }
 
@@ -1844,7 +1937,6 @@ button:focus-visible {
   touch-action: manipulation;
 }
 .color-swatch:hover { transform: scale(1.25); }
-.color-swatch:active { transform: scale(0.8); }
 .color-swatch.active {
   border-color: var(--text-primary);
   box-shadow: 0 0 0 2px var(--bg-canvas);
@@ -1884,7 +1976,6 @@ button:focus-visible {
   -webkit-tap-highlight-color: transparent;
 }
 .sel-color-btn:hover { transform: scale(1.3); }
-.sel-color-btn:active { transform: scale(0.8); }
 .sel-color-btn.active { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-canvas); }
 
 /* ===== LIBRARY STATS ===== */
@@ -2654,6 +2745,16 @@ function showToast(msg) {
   setTimeout(() => store.setState({ toast: null }), 2500);
 }
 
+function haptic(style = 'light') {
+  if (!navigator.vibrate) return;
+  switch(style) {
+    case 'light':  navigator.vibrate(8); break;
+    case 'medium': navigator.vibrate(15); break;
+    case 'heavy':  navigator.vibrate(25); break;
+    case 'success': navigator.vibrate([8, 50, 12]); break;
+  }
+}
+
 // ===== ZOOM CONTROLLER =====
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 4;
@@ -3060,6 +3161,7 @@ let currentView = null;
 function renderApp() {
   const state = store.getState();
   const root = document.getElementById('root');
+  const isViewChange = currentView !== null && currentView !== state.view;
   currentView = state.view;
   clearTimeout(zoomRenderTimer);
   pendingZoomAnchor = null;
@@ -3071,6 +3173,12 @@ function renderApp() {
   } else {
     root.innerHTML = renderReader(state);
     attachReaderEvents();
+  }
+
+  // Animate in on view switch
+  if (isViewChange) {
+    const shell = root.querySelector('.app-shell');
+    if (shell) shell.classList.add('view-entering');
   }
 }
 
@@ -3215,7 +3323,7 @@ function renderReader(state) {
         </div>
 
         <div class="reader-body">
-          ${state.sidePanel ? renderSidePanel(state) : ''}
+          ${renderSidePanel(state)}
           <div class="reading-canvas" id="reading-canvas" role="main">
             ${state.loading ? `
               <div class="loading-wrap">
@@ -3267,9 +3375,10 @@ function renderReader(state) {
 
 function renderSidePanel(state) {
   const isMobile = window.innerWidth <= 768;
+  const openClass = state.sidePanel ? 'open' : '';
   return `
-    ${isMobile ? '<div class="sidebar-backdrop" id="sidebar-backdrop"></div>' : ''}
-    <div class="side-panel" role="navigation">
+    ${isMobile ? `<div class="sidebar-backdrop ${openClass}" id="sidebar-backdrop"></div>` : ''}
+    <div class="side-panel ${openClass}" role="navigation">
       <div class="side-panel-tabs">
         <button class="sp-tab ${state.sidePanelTab === 'thumbnails' ? 'active' : ''}" data-sptab="thumbnails">Pages</button>
         <button class="sp-tab ${state.sidePanelTab === 'outline' ? 'active' : ''}" data-sptab="outline">Outline</button>
@@ -4822,6 +4931,7 @@ function attachReaderEvents() {
 
   document.getElementById('btn-bookmark')?.addEventListener('click', toggleBookmark);
   document.getElementById('btn-focus')?.addEventListener('click', () => {
+    haptic('light');
     store.setState({ focusMode: !store.getState().focusMode });
   });
   document.getElementById('btn-settings')?.addEventListener('click', () => {
@@ -5264,8 +5374,37 @@ function setupSwipeNavigation(el) {
     const dy = endY - startY;
 
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) {
-      if (dx < 0) goToPage(store.getState().currentPage + 1);
-      else goToPage(store.getState().currentPage - 1);
+      const direction = dx < 0 ? -1 : 1; // -1 = next page, 1 = prev page
+      const targetPage = store.getState().currentPage + (direction === -1 ? 1 : -1);
+      const total = store.getState().totalPages;
+      if (targetPage < 1 || targetPage > total) return;
+
+      const container = document.getElementById('page-container');
+      if (!container) { goToPage(targetPage); return; }
+
+      // Animate page out
+      container.style.transition = 'transform 0.25s cubic-bezier(0.25,0.1,0.25,1), opacity 0.25s cubic-bezier(0.25,0.1,0.25,1)';
+      container.style.transform = `translateX(${direction * 40}px)`;
+      container.style.opacity = '0.3';
+
+      setTimeout(() => {
+        // Reset and go to page
+        container.style.transition = 'none';
+        container.style.transform = '';
+        container.style.opacity = '';
+        goToPage(targetPage);
+        // Animate new page in from opposite direction
+        requestAnimationFrame(() => {
+          container.style.transition = 'none';
+          container.style.transform = `translateX(${-direction * 30}px)`;
+          container.style.opacity = '0';
+          requestAnimationFrame(() => {
+            container.style.transition = 'transform 0.3s cubic-bezier(0.25,0.1,0.25,1), opacity 0.3s cubic-bezier(0.25,0.1,0.25,1)';
+            container.style.transform = '';
+            container.style.opacity = '';
+          });
+        });
+      }, 220);
     }
   }, { passive: true });
 }
@@ -5274,6 +5413,7 @@ function setupSwipeNavigation(el) {
 function goToPage(page) {
   const state = store.getState();
   page = Math.max(1, Math.min(page, state.totalPages));
+  if (page !== state.currentPage) haptic('light');
   if (page === state.currentPage && state.continuousScroll) {
     const wrapper = document.getElementById(`page-wrap-${page}`);
     if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -5329,6 +5469,7 @@ function updateStatusBar(page) {
 
 // ===== BOOKMARKS =====
 function toggleBookmark() {
+  haptic('medium');
   const state = store.getState();
   const docId = state.currentDoc?.id;
   if (!docId) return;
@@ -5588,11 +5729,21 @@ store.subscribe((state, prev) => {
     // Settings / search modals — full re-render
     if (state.settingsOpen !== prev.settingsOpen ||
         state.searchOpen !== prev.searchOpen ||
-        state.sidePanel !== prev.sidePanel ||
         state.sidePanelTab !== prev.sidePanelTab ||
         state.showRuler !== prev.showRuler) {
       renderApp();
       return;
+    }
+
+    // Side panel toggle — animate with class instead of re-render
+    if (state.sidePanel !== prev.sidePanel) {
+      const panel = document.querySelector('.side-panel');
+      const backdrop = document.querySelector('.sidebar-backdrop');
+      if (panel) panel.classList.toggle('open', state.sidePanel);
+      if (backdrop) backdrop.classList.toggle('open', state.sidePanel);
+      // Update sidebar button active state
+      const sidebarBtn = document.getElementById('btn-sidebar');
+      if (sidebarBtn) sidebarBtn.classList.toggle('active', state.sidePanel);
     }
 
     // Focus mode toggle

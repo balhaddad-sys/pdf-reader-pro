@@ -2875,16 +2875,15 @@ function scheduleZoomRender(delayMs = 0) {
     }
     const anchor = pendingZoomAnchor;
     pendingZoomAnchor = null;
-    clearZoomPreview();
 
+    // Keep CSS preview visible during render — prevents blank flash
     // Recalculate page sizes at new zoom
     computePageLayout();
-    if (pagePositions.length === 0) return;
+    if (pagePositions.length === 0) { clearZoomPreview(); return; }
 
     const canvas = document.getElementById('reading-canvas');
 
-    // Resize existing wrappers in-place (keeps old canvases visible — no blank flash)
-    // Falls back to full rebuild if wrappers don't exist yet
+    // Resize existing wrappers in-place (keeps old canvases visible)
     const resized = resizePageWrappers();
     if (!resized) {
       buildPagePlaceholders(true);
@@ -2916,6 +2915,9 @@ function scheduleZoomRender(delayMs = 0) {
       console.error('Zoom render error:', e);
     }
     _renderingPages = false;
+
+    // NOW clear the CSS preview — pages are rendered at new scale
+    clearZoomPreview();
     setCommittedZoom(store.getState().zoom);
 
     if (_hasPendingRender) {
@@ -2940,7 +2942,6 @@ function setZoomLevel(targetZoom, options = {}) {
   const anchor = captureZoomAnchor(document.getElementById('reading-canvas'), anchorClientX, anchorClientY);
   pendingZoomAnchor = anchor;
   if (renderMode === 'debounced') applyZoomPreview(nextZoom, anchor);
-  else clearZoomPreview();
   store.setState({ zoom: nextZoom, fitMode: 'width' });
   syncZoomIndicators(nextZoom);
 
@@ -5328,9 +5329,9 @@ function setupPinchZoom(el) {
     el.removeEventListener('touchmove', onPinchMove);
 
     // Final zoom with IMMEDIATE render using the original anchor
+    // Keep CSS preview visible until pages finish rendering (no blank flash)
     const nextZoom = normalizeZoom(initialZoom * queuedScale);
     pendingZoomAnchor = pinchAnchor;
-    clearZoomPreview();
     store.setState({ zoom: nextZoom, fitMode: 'width' });
     syncZoomIndicators(nextZoom);
     scheduleZoomRender(0); // Immediate render, no 140ms delay

@@ -770,7 +770,6 @@ button:focus-visible {
   flex-shrink: 0;
   min-width: 100%;
   width: max-content;
-  contain: layout style;
 }
 
 .page-wrapper {
@@ -780,7 +779,6 @@ button:focus-visible {
   overflow: hidden;
   background: white;
   flex-shrink: 0;
-  will-change: contents;
 }
 @media (min-width: 769px) {
   .page-wrapper {
@@ -1602,22 +1600,8 @@ button:focus-visible {
   color: rgba(0,0,0,0.2);
   font-size: 14px;
   font-weight: 600;
-  position: relative;
-  overflow: hidden;
-}
-.page-placeholder::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
-  animation: shimmer 1.5s infinite;
-}
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
 }
 [data-theme="dark"] .page-placeholder { background: #3a3a3a; color: rgba(255,255,255,0.15); }
-[data-theme="dark"] .page-placeholder::after { background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%); }
 [data-theme="sepia"] .page-placeholder { background: #e8dcc8; color: rgba(0,0,0,0.15); }
 
 /* ===== RESPONSIVE ===== */
@@ -3917,13 +3901,13 @@ function setupLongPressHandler() {
     pressTimer = setTimeout(() => {
       if (moved) return;
       longPressFired = true;
-      isDraggingSelection = true;
 
       // Find the word at the press point and select it as anchor
       const selectedText = selectWordAt(touch.clientX, touch.clientY);
       if (selectedText) {
+        isDraggingSelection = true;
+        startDragListener(); // Attach non-passive listener only now
         if (navigator.vibrate) navigator.vibrate(25);
-        // Remember anchor span for drag-extend
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0) {
           const r = sel.getRangeAt(0);
@@ -3933,24 +3917,29 @@ function setupLongPressHandler() {
     }, LONG_PRESS_MS);
   }
 
+  // Non-passive drag handler — only attached during active drag-selection
+  function handleDragMove(e) {
+    if (!isDraggingSelection || !anchorSpan) return;
+    e.preventDefault();
+    const touch = e.touches ? e.touches[0] : e;
+    extendSelectionTo(touch.clientX, touch.clientY, anchorSpan);
+    const tb = document.getElementById('selection-toolbar');
+    if (tb) { tb.style.opacity = '0.2'; tb.style.pointerEvents = 'none'; }
+  }
+
+  function startDragListener() {
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+  }
+  function stopDragListener() {
+    document.removeEventListener('touchmove', handleDragMove);
+  }
+
   function handlePressMove(e) {
+    if (!pressTimer && !isDraggingSelection) return;
     const touch = e.touches ? e.touches[0] : e;
     const dx = touch.clientX - pressX;
     const dy = touch.clientY - pressY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    // If long-press fired and user starts dragging, extend the selection
-    if (longPressFired && isDraggingSelection && anchorSpan) {
-      e.preventDefault && e.preventDefault();
-      extendSelectionTo(touch.clientX, touch.clientY, anchorSpan);
-      // Fade toolbar while dragging, will re-show on end
-      const tb = document.getElementById('selection-toolbar');
-      if (tb) { tb.style.opacity = '0.2'; tb.style.pointerEvents = 'none'; }
-      return;
-    }
-
-    if (!pressTimer) return;
-    if (dist > MOVE_THRESHOLD) {
+    if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
       moved = true;
       clearPress();
     }
@@ -3959,9 +3948,9 @@ function setupLongPressHandler() {
   function handlePressEnd() {
     clearPress();
     if (isDraggingSelection) {
+      stopDragListener();
       isDraggingSelection = false;
       anchorSpan = null;
-      // Show toolbar after drag-select
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && sel.toString().trim()) {
         showSelectionToolbar();
@@ -3983,7 +3972,7 @@ function setupLongPressHandler() {
   });
 
   document.addEventListener('touchstart', handlePressStart, { passive: true });
-  document.addEventListener('touchmove', handlePressMove, { passive: false });
+  document.addEventListener('touchmove', handlePressMove, { passive: true });
   document.addEventListener('touchend', handlePressEnd);
   document.addEventListener('touchcancel', handlePressEnd);
   document.addEventListener('mousedown', (e) => { if (e.button === 0) handlePressStart(e); });

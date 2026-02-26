@@ -779,7 +779,6 @@ button:focus-visible {
   background: white;
   flex-shrink: 0;
   margin: 0 auto;
-  animation: fadeIn 0.2s ease;
 }
 @media (min-width: 769px) {
   .page-wrapper {
@@ -789,7 +788,6 @@ button:focus-visible {
 
 .page-wrapper canvas {
   display: block;
-  animation: fadeIn 0.25s ease;
 }
 
 [data-theme="dark"] .page-wrapper { background: #faf9f7; }
@@ -2578,17 +2576,24 @@ class PDFEngine {
     container.appendChild(textLayer);
 
     // Adjust scaleX to match PDF glyph widths
+    // IMPORTANT: batch all reads first, then all writes to avoid layout thrashing
     requestAnimationFrame(() => {
-      for (const span of textLayer.querySelectorAll('span')) {
+      const spans = textLayer.querySelectorAll('span');
+      const adjustments = [];
+      // Batch READ pass (one reflow)
+      for (const span of spans) {
         if (span.dataset.targetW && span.textContent.trim()) {
           const targetW = parseFloat(span.dataset.targetW);
           const actualW = span.getBoundingClientRect().width;
           if (actualW > 0 && Math.abs(targetW - actualW) > 1) {
-            span.style.transform = `scaleX(${targetW / actualW})`;
-            span.style.transformOrigin = '0% 0%';
+            adjustments.push({ span, scaleX: targetW / actualW });
           }
-          delete span.dataset.targetW;
         }
+      }
+      // Batch WRITE pass (no reflow during writes)
+      for (const { span, scaleX } of adjustments) {
+        span.style.transform = `scaleX(${scaleX})`;
+        delete span.dataset.targetW;
       }
     });
   }
@@ -3491,14 +3496,14 @@ async function renderSinglePage(pageNum) {
     return;
   }
 
-  // Defer text layer & overlays — don't block the visual render
-  requestAnimationFrame(async () => {
+  // Defer text layer & overlays — let the canvas paint first
+  setTimeout(async () => {
     await engine.renderTextLayer(pageNum, wrapper, effectiveScale).catch(() => {});
     renderHighlightsForPage(pageNum, wrapper);
     renderFreehandForPage(pageNum, wrapper);
     setupDrawingForPage(pageNum, wrapper);
     renderSearchHighlightsForPage(pageNum, wrapper);
-  });
+  }, 50);
 }
 
 async function renderVisiblePagesLazy() {

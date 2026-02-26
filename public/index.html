@@ -2762,7 +2762,7 @@ function syncZoomIndicators(zoom = store.getState().zoom) {
   if (zoomInBtn) zoomInBtn.disabled = atMax;
 }
 
-function scheduleZoomRender(delayMs = 0, forceRebuild = false) {
+function scheduleZoomRender(delayMs = 0) {
   clearTimeout(zoomRenderTimer);
   zoomRenderTimer = setTimeout(async () => {
     const state = store.getState();
@@ -2774,9 +2774,45 @@ function scheduleZoomRender(delayMs = 0, forceRebuild = false) {
     const anchor = pendingZoomAnchor;
     pendingZoomAnchor = null;
     clearZoomPreview();
-    await renderVisiblePages(forceRebuild);
+
+    // Rebuild layout + placeholders at new zoom
+    computePageLayout();
+    if (pagePositions.length === 0) return;
+    buildPagePlaceholders(true);
+
+    // Restore scroll BEFORE rendering so the right pages are visible
+    const canvas = document.getElementById('reading-canvas');
+    if (canvas && anchor) {
+      const maxLeft = Math.max(canvas.scrollWidth - canvas.clientWidth, 0);
+      const maxTop = Math.max(canvas.scrollHeight - canvas.clientHeight, 0);
+      canvas.scrollLeft = Math.min(Math.max(anchor.xRatio * canvas.scrollWidth - anchor.pointX, 0), maxLeft);
+      canvas.scrollTop = Math.min(Math.max(anchor.yRatio * canvas.scrollHeight - anchor.pointY, 0), maxTop);
+    } else if (canvas) {
+      // Fallback: scroll current page into view
+      const wrapper = document.getElementById(`page-wrap-${state.currentPage}`);
+      if (wrapper) wrapper.scrollIntoView({ block: 'start' });
+    }
+
+    // Now render the actually-visible pages
+    _renderingPages = true;
+    try {
+      if (state.continuousScroll) {
+        await renderVisiblePagesLazy();
+      } else {
+        await renderSinglePage(state.currentPage);
+      }
+    } catch (e) {
+      console.error('Zoom render error:', e);
+    }
+    _renderingPages = false;
     setCommittedZoom(store.getState().zoom);
-    restoreZoomAnchor(document.getElementById('reading-canvas'), anchor);
+
+    if (_hasPendingRender) {
+      const force = _pendingRenderForce;
+      _hasPendingRender = false;
+      _pendingRenderForce = false;
+      renderVisiblePages(force);
+    }
   }, delayMs);
 }
 
@@ -2798,9 +2834,9 @@ function setZoomLevel(targetZoom, options = {}) {
   syncZoomIndicators(nextZoom);
 
   if (renderMode === 'debounced') {
-    scheduleZoomRender(140, forceRebuild);
+    scheduleZoomRender(140);
   } else if (renderMode !== 'none') {
-    scheduleZoomRender(0, forceRebuild);
+    scheduleZoomRender(0);
   }
   return true;
 }

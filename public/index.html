@@ -778,6 +778,8 @@ button:focus-visible {
   overflow: hidden;
   background: white;
   flex-shrink: 0;
+  margin: 0 auto;
+  animation: fadeIn 0.2s ease;
 }
 @media (min-width: 769px) {
   .page-wrapper {
@@ -787,6 +789,7 @@ button:focus-visible {
 
 .page-wrapper canvas {
   display: block;
+  animation: fadeIn 0.25s ease;
 }
 
 [data-theme="dark"] .page-wrapper { background: #faf9f7; }
@@ -997,8 +1000,8 @@ button:focus-visible {
 .status-left, .status-right { display: flex; align-items: center; gap: 8px; }
 
 .status-nav-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1651,9 +1654,9 @@ button:focus-visible {
     -webkit-overflow-scrolling: touch;
   }
   .reader-topbar::-webkit-scrollbar { display: none; }
-  .topbar-btn { min-width: 38px; min-height: 38px; width: 38px; height: 38px; }
-  .topbar-sep { margin: 0 2px; height: 16px; }
-  .topbar-title { font-size: 13px; min-width: 40px; padding: 0 2px; }
+  .topbar-btn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
+  .topbar-sep { margin: 0; height: 16px; }
+  .topbar-title { font-size: 13px; min-width: 30px; padding: 0 2px; }
   #zoom-display { font-size: 11px; min-width: 32px; }
 
   /* Reading canvas: less padding */
@@ -1703,9 +1706,9 @@ button:focus-visible {
 /* Extra small screens (phones in portrait) */
 @media (max-width: 420px) {
   .reader-topbar { gap: 0; padding: env(safe-area-inset-top, 0px) 2px 0 2px; }
-  .topbar-btn { min-width: 38px; min-height: 38px; width: 38px; height: 38px; }
+  .topbar-btn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
   .topbar-sep { display: none; }
-  .topbar-title { font-size: 12px; }
+  .topbar-title { font-size: 12px; min-width: 0; }
   .page-container { padding: 4px; gap: 8px; }
   .library-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .page-slider { width: 60px; }
@@ -1714,8 +1717,7 @@ button:focus-visible {
   .page-slider-wrap { display: none; }
   .doc-card-thumb { height: 140px; }
   .library-title { font-size: 20px; }
-  /* Slightly larger status nav buttons on small phones */
-  .status-nav-btn { width: 36px; height: 36px; }
+  .status-nav-btn { width: 44px; height: 44px; }
   /* Hide read% text to save status bar space */
   #read-pct { display: none; }
   .status-divider:last-of-type { display: none; }
@@ -2564,7 +2566,6 @@ class PDFEngine {
       span.style.left = tx[4] + 'px';
       span.style.top = (tx[5] - fontHeight) + 'px';
       span.style.fontSize = fontHeight + 'px';
-      span.style.fontFamily = 'sans-serif';
       span.textContent = item.str;
 
       if (item.width > 0) {
@@ -4966,7 +4967,7 @@ function setupSwipeNavigation(el) {
     const dx = endX - startX;
     const dy = endY - startY;
 
-    if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2) {
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) {
       if (dx < 0) goToPage(store.getState().currentPage + 1);
       else goToPage(store.getState().currentPage - 1);
     }

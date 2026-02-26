@@ -767,7 +767,8 @@ button:focus-visible {
   gap: 16px;
   min-height: 100%;
   flex-shrink: 0;
-  width: 100%;
+  min-width: 100%;
+  width: max-content;
 }
 
 .page-wrapper {
@@ -778,13 +779,10 @@ button:focus-visible {
   background: white;
   transition: box-shadow var(--transition-smooth);
   flex-shrink: 0;
-  max-width: 100%;
 }
 
 .page-wrapper canvas {
   display: block;
-  max-width: 100%;
-  height: auto;
 }
 
 [data-theme="dark"] .page-wrapper { background: #faf9f7; }
@@ -2540,30 +2538,30 @@ class PDFEngine {
     if (existing) existing.remove();
 
     const page = await this.doc.getPage(pageNum);
+    // Text layer works in CSS pixels — do NOT multiply by devicePixelRatio
     const viewport = page.getViewport({ scale });
     const textContent = await page.getTextContent();
 
     const textLayer = document.createElement('div');
     textLayer.className = 'text-layer';
-    textLayer.style.width = (viewport.width / this.renderScale) + 'px';
-    textLayer.style.height = (viewport.height / this.renderScale) + 'px';
+    textLayer.style.width = viewport.width + 'px';
+    textLayer.style.height = viewport.height + 'px';
 
     for (const item of textContent.items) {
       if (!item.str) continue;
       const span = document.createElement('span');
       const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
       const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
-      const divHeight = fontHeight / this.renderScale;
-      span.style.left = (tx[4] / this.renderScale) + 'px';
-      span.style.top = ((tx[5] - fontHeight) / this.renderScale) + 'px';
-      span.style.fontSize = divHeight + 'px';
+      span.style.left = tx[4] + 'px';
+      span.style.top = (tx[5] - fontHeight) + 'px';
+      span.style.fontSize = fontHeight + 'px';
       span.style.fontFamily = 'sans-serif';
       span.textContent = item.str;
 
       if (item.width > 0) {
         const targetW = item.width * scale;
-        span.style.width = (targetW / this.renderScale) + 'px';
-        span.dataset.targetW = (targetW / this.renderScale);
+        span.style.width = targetW + 'px';
+        span.dataset.targetW = targetW;
       }
       textLayer.appendChild(span);
     }
@@ -3300,7 +3298,8 @@ let pagePositions = [];
 let renderedPages = new Set();
 let effectiveScale = 1;
 let _renderingPages = false;
-let _pendingRender = null;
+let _hasPendingRender = false;
+let _pendingRenderForce = false;
 let _builtScale = null;
 let _builtMode = null;
 let _builtPageCount = 0;
@@ -3411,7 +3410,8 @@ async function renderVisiblePages(forceRebuild) {
 
   // If a render is already running, queue this one so it runs after
   if (_renderingPages) {
-    _pendingRender = forceRebuild || _pendingRender;
+    _hasPendingRender = true;
+    if (forceRebuild) _pendingRenderForce = true;
     return;
   }
   _renderingPages = true;
@@ -3437,10 +3437,11 @@ async function renderVisiblePages(forceRebuild) {
   _renderingPages = false;
 
   // If another render was requested while we were busy, run it now
-  if (_pendingRender !== null) {
-    const pending = _pendingRender;
-    _pendingRender = null;
-    renderVisiblePages(pending);
+  if (_hasPendingRender) {
+    const force = _pendingRenderForce;
+    _hasPendingRender = false;
+    _pendingRenderForce = false;
+    renderVisiblePages(force);
   }
 }
 

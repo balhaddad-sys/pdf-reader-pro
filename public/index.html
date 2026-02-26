@@ -3600,6 +3600,23 @@ async function renderVisiblePages(forceRebuild) {
   }
 }
 
+// Deferred text layer queue — renders text/overlays after scroll settles
+let _pendingTextLayers = [];
+let _textLayerTimer = null;
+
+async function flushTextLayers() {
+  const batch = _pendingTextLayers.splice(0);
+  for (const { pageNum, wrapper, scale } of batch) {
+    if (!renderedPages.has(pageNum)) continue; // page was unloaded
+    if (wrapper.querySelector('.text-layer')) continue; // already done
+    await engine.renderTextLayer(pageNum, wrapper, scale).catch(() => {});
+    renderHighlightsForPage(pageNum, wrapper);
+    renderFreehandForPage(pageNum, wrapper);
+    setupDrawingForPage(pageNum, wrapper);
+    renderSearchHighlightsForPage(pageNum, wrapper);
+  }
+}
+
 async function renderSinglePage(pageNum) {
   const wrapper = document.getElementById(`page-wrap-${pageNum}`);
   if (!wrapper || renderedPages.has(pageNum)) return;
@@ -3636,14 +3653,10 @@ async function renderSinglePage(pageNum) {
     return;
   }
 
-  // Defer text layer & overlays — let the canvas paint first
-  setTimeout(async () => {
-    await engine.renderTextLayer(pageNum, wrapper, effectiveScale).catch(() => {});
-    renderHighlightsForPage(pageNum, wrapper);
-    renderFreehandForPage(pageNum, wrapper);
-    setupDrawingForPage(pageNum, wrapper);
-    renderSearchHighlightsForPage(pageNum, wrapper);
-  }, 50);
+  // Defer text layer & overlays — render after scroll settles
+  _pendingTextLayers.push({ pageNum, wrapper, scale: effectiveScale });
+  clearTimeout(_textLayerTimer);
+  _textLayerTimer = setTimeout(flushTextLayers, 180);
 }
 
 async function renderVisiblePagesLazy() {
@@ -3652,7 +3665,8 @@ async function renderVisiblePagesLazy() {
 
   const scrollTop = canvas.scrollTop;
   const viewHeight = canvas.clientHeight;
-  const buffer = Math.max(viewHeight * 0.6, 500);
+  const buffer = Math.max(viewHeight * 1.5, 800);
+  const viewCenter = scrollTop + viewHeight / 2;
 
   const pagesToRender = [];
   const pagesToUnload = [];
@@ -3662,9 +3676,11 @@ async function renderVisiblePagesLazy() {
     const inRange = pageBottom > (scrollTop - buffer) && pos.top < (scrollTop + viewHeight + buffer);
 
     if (inRange && !renderedPages.has(pos.page)) {
-      pagesToRender.push(pos.page);
+      // Sort key: distance from viewport center (closest first)
+      const pageCenter = pos.top + pos.height / 2;
+      pagesToRender.push({ page: pos.page, dist: Math.abs(pageCenter - viewCenter) });
     } else if (!inRange && renderedPages.has(pos.page)) {
-      const farAway = pos.top > (scrollTop + viewHeight * 5) || pageBottom < (scrollTop - viewHeight * 5);
+      const farAway = pos.top > (scrollTop + viewHeight * 4) || pageBottom < (scrollTop - viewHeight * 4);
       if (farAway) pagesToUnload.push(pos.page);
     }
   }
@@ -3681,10 +3697,13 @@ async function renderVisiblePagesLazy() {
     }
   }
 
-  // Render visible pages in parallel (max 3 concurrent)
-  const BATCH = 3;
+  // Sort: closest pages to viewport center render first
+  pagesToRender.sort((a, b) => a.dist - b.dist);
+
+  // Render visible pages in parallel (max 4 concurrent)
+  const BATCH = 4;
   for (let i = 0; i < pagesToRender.length; i += BATCH) {
-    await Promise.all(pagesToRender.slice(i, i + BATCH).map(p => renderSinglePage(p)));
+    await Promise.all(pagesToRender.slice(i, i + BATCH).map(p => renderSinglePage(p.page)));
   }
 }
 
@@ -4897,13 +4916,13 @@ function attachReaderEvents() {
     }
     lastScrollTop = st <= 0 ? 0 : st;
 
-    // Throttled: page detection + lazy rendering (runs max every 150ms)
+    // Throttled: page detection + lazy rendering (runs max every 60ms)
     if (!lazyRenderTimer) {
       lazyRenderTimer = setTimeout(() => {
         lazyRenderTimer = null;
         updateCurrentPageFromScroll();
         if (store.getState().continuousScroll) renderVisiblePagesLazy();
-      }, 150);
+      }, 60);
     }
   }, { passive: true });
 

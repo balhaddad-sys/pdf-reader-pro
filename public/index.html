@@ -2775,25 +2775,34 @@ function scheduleZoomRender(delayMs = 0) {
     pendingZoomAnchor = null;
     clearZoomPreview();
 
-    // Rebuild layout + placeholders at new zoom
+    // Recalculate page sizes at new zoom
     computePageLayout();
     if (pagePositions.length === 0) return;
-    buildPagePlaceholders(true);
 
-    // Restore scroll BEFORE rendering so the right pages are visible
     const canvas = document.getElementById('reading-canvas');
+
+    // Resize existing wrappers in-place (keeps old canvases visible — no blank flash)
+    // Falls back to full rebuild if wrappers don't exist yet
+    const resized = resizePageWrappers();
+    if (!resized) {
+      buildPagePlaceholders(true);
+    }
+
+    // Restore scroll to anchor point BEFORE rendering
     if (canvas && anchor) {
       const maxLeft = Math.max(canvas.scrollWidth - canvas.clientWidth, 0);
       const maxTop = Math.max(canvas.scrollHeight - canvas.clientHeight, 0);
       canvas.scrollLeft = Math.min(Math.max(anchor.xRatio * canvas.scrollWidth - anchor.pointX, 0), maxLeft);
       canvas.scrollTop = Math.min(Math.max(anchor.yRatio * canvas.scrollHeight - anchor.pointY, 0), maxTop);
     } else if (canvas) {
-      // Fallback: scroll current page into view
       const wrapper = document.getElementById(`page-wrap-${state.currentPage}`);
       if (wrapper) wrapper.scrollIntoView({ block: 'start' });
     }
 
-    // Now render the actually-visible pages
+    // Cancel stale renders, then re-render visible pages at new scale
+    engine.renderTasks.forEach(t => { try { t.cancel(); } catch(_){} });
+    engine.renderTasks.clear();
+
     _renderingPages = true;
     try {
       if (state.continuousScroll) {
@@ -3527,6 +3536,27 @@ function computePageLayout() {
   }
 }
 
+// Resize existing wrappers in-place for zoom (no DOM destruction)
+function resizePageWrappers() {
+  const state = store.getState();
+  if (!state.continuousScroll) return false;
+  const container = document.getElementById('page-container');
+  if (!container || container.children.length === 0) return false;
+
+  // Resize each wrapper to new dimensions — canvases stay visible (old scale, slightly off)
+  for (const pos of pagePositions) {
+    const wrapper = document.getElementById(`page-wrap-${pos.page}`);
+    if (wrapper) {
+      wrapper.style.width = pos.width + 'px';
+      wrapper.style.height = pos.height + 'px';
+    }
+  }
+  // Mark all rendered pages for re-render at new scale
+  renderedPages.clear();
+  _builtScale = Math.round(effectiveScale * 1000);
+  return true;
+}
+
 function buildPagePlaceholders(force) {
   const container = document.getElementById('page-container');
   if (!container) return;
@@ -3658,9 +3688,12 @@ async function renderSinglePage(pageNum) {
   if (!wrapper || renderedPages.has(pageNum)) return;
   renderedPages.add(pageNum);
 
-  // Clear placeholder
+  // Clear placeholder and stale overlays from previous scale
   const ph = wrapper.querySelector('.page-placeholder');
   if (ph) ph.remove();
+  const oldText = wrapper.querySelector('.text-layer');
+  if (oldText) oldText.remove();
+  wrapper.querySelectorAll('.highlight-overlay,.drawing-canvas,.search-page-highlight,.note-pin,.note-popover').forEach(el => el.remove());
 
   if (!wrapper.querySelector('canvas')) {
     const cvs = document.createElement('canvas');

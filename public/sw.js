@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pdf-reader-pro-v25';
+const CACHE_NAME = 'pdf-reader-pro-v26';
 const ASSETS = [
   './',
   './index.html',

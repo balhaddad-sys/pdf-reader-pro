@@ -3300,6 +3300,7 @@ let pagePositions = [];
 let renderedPages = new Set();
 let effectiveScale = 1;
 let _renderingPages = false;
+let _pendingRender = null;
 let _builtScale = null;
 let _builtMode = null;
 let _builtPageCount = 0;
@@ -3406,7 +3407,13 @@ function buildPagePlaceholders(force) {
 
 async function renderVisiblePages(forceRebuild) {
   const state = store.getState();
-  if (!state.pdfDoc || state.loading || _renderingPages) return;
+  if (!state.pdfDoc || state.loading) return;
+
+  // If a render is already running, queue this one so it runs after
+  if (_renderingPages) {
+    _pendingRender = forceRebuild || _pendingRender;
+    return;
+  }
   _renderingPages = true;
 
   try {
@@ -3428,6 +3435,13 @@ async function renderVisiblePages(forceRebuild) {
     console.error('renderVisiblePages error:', e);
   }
   _renderingPages = false;
+
+  // If another render was requested while we were busy, run it now
+  if (_pendingRender !== null) {
+    const pending = _pendingRender;
+    _pendingRender = null;
+    renderVisiblePages(pending);
+  }
 }
 
 async function renderSinglePage(pageNum) {
@@ -4549,13 +4563,13 @@ function attachReaderEvents() {
   document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
     const z = Math.min(store.getState().zoom + 0.15, 4);
     store.setState({ zoom: z });
-    renderVisiblePages();
+    renderVisiblePages(true);
   });
 
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
     const z = Math.max(store.getState().zoom - 0.15, 0.3);
     store.setState({ zoom: z });
-    renderVisiblePages();
+    renderVisiblePages(true);
   });
 
   document.getElementById('btn-search')?.addEventListener('click', () => {
@@ -4818,7 +4832,7 @@ function attachSettingsEvents() {
       } else {
         store.setState({ fitMode: 'width', zoom: parseFloat(v) });
       }
-      renderVisiblePages();
+      renderVisiblePages(true);
     });
   });
 }
@@ -4879,7 +4893,7 @@ function setupPinchZoom(el) {
       if (zi) zi.textContent = Math.round(newZoom * 100) + '%';
 
       clearTimeout(zoomTimeout);
-      zoomTimeout = setTimeout(() => renderVisiblePages(), 200);
+      zoomTimeout = setTimeout(() => renderVisiblePages(true), 200);
     }
   }, { passive: true });
 }
@@ -5158,14 +5172,14 @@ function handleKeyboard(e) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         store.setState({ zoom: Math.min(state.zoom + 0.15, 4) });
-        renderVisiblePages();
+        renderVisiblePages(true);
       }
       break;
     case '-':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         store.setState({ zoom: Math.max(state.zoom - 0.15, 0.3) });
-        renderVisiblePages();
+        renderVisiblePages(true);
       }
       break;
   }
@@ -5292,7 +5306,7 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(() => {
     if (store.getState().view === 'reader' && store.getState().pdfDoc) {
-      renderVisiblePages();
+      renderVisiblePages(true);
     }
   }, 250);
 });

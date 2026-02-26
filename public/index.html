@@ -327,7 +327,7 @@ button:focus-visible {
 .library-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0 24px 24px;
+  padding: 0 24px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 .library-grid {
@@ -345,15 +345,16 @@ button:focus-visible {
   position: relative;
 }
 
-.doc-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-xl);
-  border-color: rgba(59,130,246,0.3);
+@media (hover: hover) {
+  .doc-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(59,130,246,0.2);
+  }
 }
 
 .doc-card:active {
-  transform: translateY(-2px) scale(0.99);
-  box-shadow: var(--shadow-md);
+  transform: scale(0.98);
 }
 
 .doc-card-thumb {
@@ -466,8 +467,7 @@ button:focus-visible {
 .drop-zone-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(45,91,227,0.08);
-  backdrop-filter: blur(4px);
+  background: rgba(45,91,227,0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1298,9 +1298,7 @@ button:focus-visible {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.55);
   z-index: 500;
   display: flex;
   align-items: center;
@@ -1912,7 +1910,7 @@ button:focus-visible {
   border-radius: 0;
   transition: transform var(--transition-smooth);
 }
-.doc-card:hover .doc-thumb-img { transform: scale(1.04); }
+@media (hover: hover) { .doc-card:hover .doc-thumb-img { transform: scale(1.03); } }
 
 /* Continue reading badge */
 .doc-card-continue {
@@ -1944,9 +1942,7 @@ button:focus-visible {
 .note-dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.55);
   z-index: 9999;
   display: flex;
   align-items: flex-end;
@@ -2454,7 +2450,6 @@ class PDFEngine {
     this.pageTextContents = new Map();
     this.pageDimCache = new Map();
     this.renderScale = window.devicePixelRatio || 1;
-    this._lastBuffer = null;
   }
 
   async loadDocument(file, onProgress) {
@@ -2463,7 +2458,6 @@ class PDFEngine {
   }
 
   async loadFromBuffer(arrayBuffer, onProgress) {
-    this._lastBuffer = arrayBuffer;
     this.pageDimCache.clear();
     this.pageTextContents.clear();
     this.renderTasks.forEach(t => { try { t.cancel(); } catch(_){} });
@@ -2482,11 +2476,12 @@ class PDFEngine {
     const vp1 = p1.getViewport({ scale: 1 });
     this.pageDimCache.set(1, { width: vp1.width, height: vp1.height });
 
-    // Get outline in background (don't block)
+    // Get outline (await so it's available on return)
     let outline = [];
-    this.doc.getOutline().then(ol => {
-      if (ol) this.processOutline(ol).then(o => { outline = o; });
-    }).catch(() => {});
+    try {
+      const ol = await this.doc.getOutline();
+      if (ol) outline = await this.processOutline(ol);
+    } catch(_) {}
 
     return { doc: this.doc, pageCount: this.doc.numPages, outline, arrayBuffer };
   }
@@ -3510,7 +3505,6 @@ function computePageLayout() {
 
   const canvas = document.getElementById('reading-canvas');
   if (!canvas) return;
-  // Account for page-container padding (smaller on mobile)
   const pc = document.getElementById('page-container');
   const padding = pc ? parseFloat(getComputedStyle(pc).paddingLeft) * 2 : 40;
   const canvasWidth = canvas.clientWidth - padding;
@@ -4787,7 +4781,7 @@ function attachLibraryEvents() {
 }
 
 function setupDragDrop() {
-  document.addEventListener('dragover', (e) => { e.preventDefault(); store.setState({ isDragging: true }); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); if (!store.getState().isDragging) store.setState({ isDragging: true }); });
   document.addEventListener('dragleave', (e) => {
     if (e.relatedTarget === null) store.setState({ isDragging: false });
   });
@@ -4854,8 +4848,15 @@ function attachReaderEvents() {
     }
   });
 
-  document.getElementById('page-slider')?.addEventListener('input', (e) => {
-    goToPage(parseInt(e.target.value));
+  // Debounced slider — show page number instantly, render after 120ms idle
+  let _sliderTimer = null;
+  const slider = document.getElementById('page-slider');
+  slider?.addEventListener('input', (e) => {
+    const page = parseInt(e.target.value);
+    const pageNum = document.getElementById('page-num-current');
+    if (pageNum) pageNum.textContent = page;
+    clearTimeout(_sliderTimer);
+    _sliderTimer = setTimeout(() => goToPage(page), 120);
   });
 
   // Prev/Next page navigation
@@ -5049,6 +5050,7 @@ function attachReaderEvents() {
 
   // Pinch-to-zoom
   setupPinchZoom(readingCanvas);
+  setupDoubleTapZoom(readingCanvas);
 
   // Swipe navigation (single-page mode)
   setupSwipeNavigation(readingCanvas);
@@ -5209,6 +5211,38 @@ function setupPinchZoom(el) {
   }, { passive: true });
 }
 
+// ===== MOBILE: DOUBLE-TAP TO ZOOM =====
+function setupDoubleTapZoom(el) {
+  if (!el) return;
+  let lastTap = 0;
+  let lastX = 0;
+  let lastY = 0;
+  el.addEventListener('touchend', (e) => {
+    if (e.touches.length > 0) return; // still fingers down
+    const now = Date.now();
+    const x = e.changedTouches[0].clientX;
+    const y = e.changedTouches[0].clientY;
+    const dt = now - lastTap;
+    const dist = Math.sqrt((x - lastX) ** 2 + (y - lastY) ** 2);
+    if (dt < 320 && dist < 40) {
+      e.preventDefault();
+      lastTap = 0;
+      const state = store.getState();
+      // If zoomed in, reset to 1.0. If at 1.0, zoom to 2.0.
+      const target = state.zoom > 1.05 ? 1.0 : 2.0;
+      setZoomLevel(target, {
+        renderMode: 'immediate',
+        anchorClientX: x,
+        anchorClientY: y,
+      });
+    } else {
+      lastTap = now;
+      lastX = x;
+      lastY = y;
+    }
+  }, { passive: false });
+}
+
 // ===== MOBILE: SWIPE NAVIGATION =====
 function setupSwipeNavigation(el) {
   if (!el) return;
@@ -5284,8 +5318,8 @@ function updateStatusBar(page) {
   const state = store.getState();
   const slider = document.getElementById('page-slider');
   if (slider) slider.value = page;
-  const pageInfo = document.getElementById('page-info');
-  if (pageInfo) pageInfo.innerHTML = `Page <strong>${page}</strong> of ${state.totalPages}`;
+  const pageNum = document.getElementById('page-num-current');
+  if (pageNum) pageNum.textContent = page;
   const pct = Math.round((page / Math.max(state.totalPages, 1)) * 100);
   const readPct = document.getElementById('read-pct');
   if (readPct) readPct.textContent = `${pct}% read`;

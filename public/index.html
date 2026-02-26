@@ -768,8 +768,7 @@ button:focus-visible {
   gap: 16px;
   min-height: 100%;
   flex-shrink: 0;
-  min-width: 100%;
-  width: max-content;
+  width: 100%;
 }
 
 .page-wrapper {
@@ -4753,25 +4752,27 @@ function attachReaderEvents() {
 
   // Scroll-driven lazy rendering + auto-hide topbar
   const readingCanvas = document.getElementById('reading-canvas');
-  let scrollRaf = null;
+  const topbarEl = document.querySelector('.reader-topbar');
   let lastScrollTop = 0;
+  let lazyRenderTimer = null;
+
   readingCanvas?.addEventListener('scroll', () => {
-    if (scrollRaf) cancelAnimationFrame(scrollRaf);
-    scrollRaf = requestAnimationFrame(() => {
-      updateCurrentPageFromScroll();
-      if (store.getState().continuousScroll) renderVisiblePagesLazy();
-      // Auto-hide topbar
-      const st = readingCanvas.scrollTop;
-      const topbar = document.querySelector('.reader-topbar');
-      if (topbar && !topbar.classList.contains('hidden')) {
-        if (st > lastScrollTop && st > 80) {
-          topbar.classList.add('scroll-hidden');
-        } else if (st < lastScrollTop) {
-          topbar.classList.remove('scroll-hidden');
-        }
-      }
-      lastScrollTop = st <= 0 ? 0 : st;
-    });
+    // Lightweight: topbar show/hide (no layout queries, just classList)
+    const st = readingCanvas.scrollTop;
+    if (topbarEl) {
+      if (st > lastScrollTop && st > 80) topbarEl.classList.add('scroll-hidden');
+      else if (st < lastScrollTop) topbarEl.classList.remove('scroll-hidden');
+    }
+    lastScrollTop = st <= 0 ? 0 : st;
+
+    // Throttled: page detection + lazy rendering (runs max every 150ms)
+    if (!lazyRenderTimer) {
+      lazyRenderTimer = setTimeout(() => {
+        lazyRenderTimer = null;
+        updateCurrentPageFromScroll();
+        if (store.getState().continuousScroll) renderVisiblePagesLazy();
+      }, 150);
+    }
   }, { passive: true });
 
   // Tap canvas to show topbar if hidden
@@ -5000,17 +5001,18 @@ function goToPage(page) {
 
 function updateCurrentPageFromScroll() {
   const container = document.getElementById('reading-canvas');
-  if (!container) return;
+  if (!container || pagePositions.length === 0) return;
 
   const scrollTop = container.scrollTop + container.clientHeight / 3;
+  const currentPage = store.getState().currentPage;
 
   for (const pos of pagePositions) {
     if (pos.top + pos.height > scrollTop) {
-      if (pos.page !== store.getState().currentPage) {
-        store.setState({ currentPage: pos.page });
+      if (pos.page !== currentPage) {
+        store.state.currentPage = pos.page; // Direct mutation — skip subscriber
         updateStatusBar(pos.page);
       }
-      break;
+      return;
     }
   }
 }

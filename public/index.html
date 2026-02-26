@@ -2827,10 +2827,14 @@ function applyZoomPreview(nextZoom, anchor) {
   pageContainer.style.setProperty('--zoom-preview-ratio', ratio.toFixed(4));
 
   if (anchor) {
-    const anchorXPct = (anchor.pointX / Math.max(readingCanvas.clientWidth, 1)) * 100;
-    const anchorYPct = (anchor.pointY / Math.max(readingCanvas.clientHeight, 1)) * 100;
-    pageContainer.style.setProperty('--zoom-anchor-x', anchorXPct.toFixed(2) + '%');
-    pageContainer.style.setProperty('--zoom-anchor-y', anchorYPct.toFixed(2) + '%');
+    // Transform-origin must be in page-container's coordinate space
+    // pointX/Y are viewport-relative; add scroll offset to get content position
+    const contentX = readingCanvas.scrollLeft + anchor.pointX;
+    const contentY = readingCanvas.scrollTop + anchor.pointY;
+    const originXPct = (contentX / Math.max(pageContainer.scrollWidth || pageContainer.offsetWidth, 1)) * 100;
+    const originYPct = (contentY / Math.max(pageContainer.scrollHeight || pageContainer.offsetHeight, 1)) * 100;
+    pageContainer.style.setProperty('--zoom-anchor-x', originXPct.toFixed(2) + '%');
+    pageContainer.style.setProperty('--zoom-anchor-y', originYPct.toFixed(2) + '%');
   }
 }
 
@@ -5260,16 +5264,21 @@ function setupPinchZoom(el) {
   let pinching = false;
   let pinchRAF = null;
   let queuedScale = 1;
-  let queuedCenterX = 0;
-  let queuedCenterY = 0;
+  let pinchAnchor = null; // Captured ONCE at pinch start
 
   function flushPinchZoom() {
     pinchRAF = null;
-    setZoomLevel(initialZoom * queuedScale, {
-      renderMode: 'debounced',
-      anchorClientX: queuedCenterX,
-      anchorClientY: queuedCenterY,
-    });
+    const nextZoom = normalizeZoom(initialZoom * queuedScale);
+    const state = store.getState();
+    if (Math.abs(nextZoom - state.zoom) <= ZOOM_EPSILON) return;
+
+    // Reuse the anchor captured at pinch start — don't re-capture
+    pendingZoomAnchor = pinchAnchor;
+    applyZoomPreview(nextZoom, pinchAnchor);
+    store.setState({ zoom: nextZoom, fitMode: 'width' });
+    syncZoomIndicators(nextZoom);
+    // Don't schedule render during active pinch — wait for release
+    clearTimeout(zoomRenderTimer);
   }
 
   // Non-passive handler — only attached while 2 fingers are down
@@ -5282,8 +5291,6 @@ function setupPinchZoom(el) {
     );
     if (initialDistance <= 0) return;
     queuedScale = dist / initialDistance;
-    queuedCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    queuedCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
     if (!pinchRAF) pinchRAF = requestAnimationFrame(flushPinchZoom);
   }
 
@@ -5293,9 +5300,16 @@ function setupPinchZoom(el) {
     if (pinchRAF) {
       cancelAnimationFrame(pinchRAF);
       pinchRAF = null;
-      flushPinchZoom();
     }
     el.removeEventListener('touchmove', onPinchMove);
+
+    // Final zoom with IMMEDIATE render using the original anchor
+    const nextZoom = normalizeZoom(initialZoom * queuedScale);
+    pendingZoomAnchor = pinchAnchor;
+    clearZoomPreview();
+    store.setState({ zoom: nextZoom, fitMode: 'width' });
+    syncZoomIndicators(nextZoom);
+    scheduleZoomRender(0); // Immediate render, no 140ms delay
   }
 
   el.addEventListener('touchstart', (e) => {
@@ -5307,8 +5321,10 @@ function setupPinchZoom(el) {
       );
       initialZoom = store.getState().zoom;
       queuedScale = 1;
-      queuedCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      queuedCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      // Capture anchor ONCE at the midpoint of the two fingers
+      pinchAnchor = captureZoomAnchor(el, cx, cy);
       el.addEventListener('touchmove', onPinchMove, { passive: false });
     }
   }, { passive: true });

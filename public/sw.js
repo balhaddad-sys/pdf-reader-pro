@@ -1,12 +1,12 @@
-const CACHE_NAME = 'pdf-reader-pro-v13';
+const CACHE_NAME = 'pdf-reader-pro-v14';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icons/icon-96.png',
   './404.html',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  './lib/pdf.min.js',
+  './lib/pdf.worker.min.js',
   'https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap'
 ];
 

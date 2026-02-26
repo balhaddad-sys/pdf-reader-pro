@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#f8f9fb">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="description" content="A fast, private, offline-capable PDF reader. Highlight, annotate, bookmark, and read PDFs beautifully on any device.">
 <meta property="og:title" content="PDF Reader Pro">
 <meta property="og:description" content="A fast, private, offline-capable PDF reader with highlights, annotations, and bookmarks.">
@@ -20,12 +20,11 @@
 <link rel="icon" type="image/png" sizes="96x96" href="./icons/icon-96.png">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <link rel="manifest" href="manifest.json">
-<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
 <link rel="dns-prefetch" href="https://fonts.googleapis.com">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
+<!-- pdf.js bundled locally for offline/APK use -->
+<script src="./lib/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
@@ -809,9 +808,10 @@ button:focus-visible {
   overflow: hidden;
   line-height: 1;
   z-index: 2;
-  -webkit-touch-callout: none;
+  -webkit-touch-callout: default;
   -webkit-user-select: text;
   user-select: text;
+  touch-action: auto;
 }
 
 .text-layer span {
@@ -819,12 +819,18 @@ button:focus-visible {
   white-space: pre;
   transform-origin: 0% 0%;
   color: transparent;
-  padding: 1px 0;
+  padding: 2px 0;
+  min-height: 1em;
 }
 
 .text-layer span::selection {
-  background: rgba(59,130,246,0.3);
+  background: rgba(59,130,246,0.35);
   color: transparent;
+}
+
+@media (pointer: coarse) {
+  .text-layer span { padding: 3px 0; }
+  .text-layer span::selection { background: rgba(59,130,246,0.4); }
 }
 
 /* Highlight overlays */
@@ -2249,7 +2255,7 @@ async function warnIfStorageLow() {
 }
 
 const { pdfjsLib } = globalThis;
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./lib/pdf.worker.min.js', location.href).href;
 
 // ===== ICONS (inline SVG) =====
 const Icons = {
@@ -3835,8 +3841,10 @@ function setupLongPressHandler() {
   let pressY = 0;
   let moved = false;
   let longPressFired = false;
-  const LONG_PRESS_MS = 450;
-  const MOVE_THRESHOLD = 10;
+  let isDraggingSelection = false;
+  let anchorSpan = null;
+  const LONG_PRESS_MS = 400;
+  const MOVE_THRESHOLD = 18;
 
   function clearPress() {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
@@ -3862,41 +3870,79 @@ function setupLongPressHandler() {
     pressY = touch.clientY;
     moved = false;
     longPressFired = false;
+    isDraggingSelection = false;
+    anchorSpan = null;
 
     pressTimer = setTimeout(() => {
       if (moved) return;
       longPressFired = true;
+      isDraggingSelection = true;
 
-      const selectedText = selectLineAt(touch.clientX, touch.clientY);
+      // Find the word at the press point and select it as anchor
+      const selectedText = selectWordAt(touch.clientX, touch.clientY);
       if (selectedText) {
         if (navigator.vibrate) navigator.vibrate(25);
-        showSelectionToolbar();
+        // Remember anchor span for drag-extend
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const r = sel.getRangeAt(0);
+          anchorSpan = r.startContainer.nodeType === Node.TEXT_NODE ? r.startContainer.parentElement : r.startContainer;
+        }
       }
     }, LONG_PRESS_MS);
   }
 
   function handlePressMove(e) {
-    if (!pressTimer) return;
     const touch = e.touches ? e.touches[0] : e;
     const dx = touch.clientX - pressX;
     const dy = touch.clientY - pressY;
-    if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // If long-press fired and user starts dragging, extend the selection
+    if (longPressFired && isDraggingSelection && anchorSpan) {
+      e.preventDefault && e.preventDefault();
+      extendSelectionTo(touch.clientX, touch.clientY, anchorSpan);
+      // Dismiss toolbar while dragging, will re-show on end
+      const tb = document.getElementById('selection-toolbar');
+      if (tb) tb.style.visibility = 'hidden';
+      return;
+    }
+
+    if (!pressTimer) return;
+    if (dist > MOVE_THRESHOLD) {
       moved = true;
       clearPress();
     }
   }
 
-  function handlePressEnd() { clearPress(); }
+  function handlePressEnd() {
+    clearPress();
+    if (isDraggingSelection) {
+      isDraggingSelection = false;
+      anchorSpan = null;
+      // Show toolbar after drag-select
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) {
+        showSelectionToolbar();
+      }
+    }
+  }
 
-  // Always suppress native context menu on text layer (we have our own toolbar)
+  // Suppress native context menu on canvas/wrapper but allow it on text-layer
+  // when there is an active text selection (so native selection handles work on mobile)
   document.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.text-layer')) {
+      // Allow native context menu if text is selected (enables mobile selection handles)
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+    }
     if (e.target.closest('.text-layer') || e.target.closest('.page-wrapper') || e.target.closest('.reading-canvas')) {
       e.preventDefault();
     }
   });
 
   document.addEventListener('touchstart', handlePressStart, { passive: true });
-  document.addEventListener('touchmove', handlePressMove, { passive: true });
+  document.addEventListener('touchmove', handlePressMove, { passive: false });
   document.addEventListener('touchend', handlePressEnd);
   document.addEventListener('touchcancel', handlePressEnd);
   document.addEventListener('mousedown', (e) => { if (e.button === 0) handlePressStart(e); });
@@ -3982,6 +4028,132 @@ function selectLineAt(x, y) {
   return selection.toString().trim() || null;
 }
 
+// Select the word at the given point (for initial long-press on mobile)
+function selectWordAt(x, y) {
+  let hitSpan = null;
+
+  if (document.caretRangeFromPoint) {
+    const caret = document.caretRangeFromPoint(x, y);
+    if (caret && caret.startContainer) {
+      const node = caret.startContainer;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  if (!hitSpan && document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode) {
+      const node = pos.offsetNode;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  if (!hitSpan) {
+    const target = document.elementFromPoint(x, y);
+    if (target) hitSpan = target.closest('.text-layer span');
+  }
+
+  if (!hitSpan || !hitSpan.closest('.text-layer')) return null;
+
+  const textNode = hitSpan.firstChild;
+  if (!textNode) return null;
+
+  // Find the character offset at the touch point
+  let charOffset = 0;
+  if (document.caretRangeFromPoint) {
+    const caret = document.caretRangeFromPoint(x, y);
+    if (caret && caret.startContainer === textNode) charOffset = caret.startOffset;
+  } else if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode === textNode) charOffset = pos.offset;
+  }
+
+  const text = textNode.textContent;
+  // Expand to word boundaries
+  let start = charOffset, end = charOffset;
+  while (start > 0 && /\S/.test(text[start - 1])) start--;
+  while (end < text.length && /\S/.test(text[end])) end++;
+
+  // If we didn't find a word, select the whole span
+  if (start === end) { start = 0; end = text.length; }
+
+  const range = document.createRange();
+  range.setStart(textNode, start);
+  range.setEnd(textNode, end);
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  return selection.toString().trim() || null;
+}
+
+// Extend selection from the anchor span to wherever the finger is dragging
+function extendSelectionTo(x, y, anchor) {
+  let hitSpan = null;
+
+  if (document.caretRangeFromPoint) {
+    const caret = document.caretRangeFromPoint(x, y);
+    if (caret && caret.startContainer) {
+      const node = caret.startContainer;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  if (!hitSpan && document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode) {
+      const node = pos.offsetNode;
+      hitSpan = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (hitSpan && hitSpan.tagName !== 'SPAN') hitSpan = hitSpan.closest('.text-layer span');
+    }
+  }
+
+  if (!hitSpan) {
+    const target = document.elementFromPoint(x, y);
+    if (target) hitSpan = target.closest('.text-layer span');
+  }
+
+  if (!hitSpan || !anchor) return;
+
+  const textLayer = hitSpan.closest('.text-layer');
+  if (!textLayer || !textLayer.contains(anchor)) return;
+
+  const anchorNode = anchor.firstChild;
+  const hitNode = hitSpan.firstChild;
+  if (!anchorNode || !hitNode) return;
+
+  // Find character offset in hit span
+  let hitOffset = hitNode.textContent.length;
+  if (document.caretRangeFromPoint) {
+    const caret = document.caretRangeFromPoint(x, y);
+    if (caret && caret.startContainer === hitNode) hitOffset = caret.startOffset;
+  } else if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode === hitNode) hitOffset = pos.offset;
+  }
+
+  // Determine direction: anchor before or after hit
+  const anchorRect = anchor.getBoundingClientRect();
+  const hitRect = hitSpan.getBoundingClientRect();
+
+  const range = document.createRange();
+  if (anchorRect.top < hitRect.top || (anchorRect.top === hitRect.top && anchorRect.left <= hitRect.left)) {
+    range.setStart(anchorNode, 0);
+    range.setEnd(hitNode, hitOffset);
+  } else {
+    range.setStart(hitNode, hitOffset);
+    range.setEnd(anchorNode, anchorNode.textContent.length);
+  }
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 // Show floating toolbar positioned near the current selection
 function showSelectionToolbar() {
   dismissSelectionToolbar();
@@ -4061,9 +4233,21 @@ function showSelectionToolbar() {
 
 function _dismissOnOutside(e) {
   const toolbar = document.getElementById('selection-toolbar');
-  if (toolbar && !toolbar.contains(e.target)) dismissSelectionToolbar();
+  if (toolbar && !toolbar.contains(e.target)) {
+    // Don't dismiss if the user is tapping inside the text layer (may be adjusting selection handles)
+    if (e.target.closest('.text-layer')) {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return;
+    }
+    dismissSelectionToolbar();
+  }
 }
-function _dismissOnScroll() { dismissSelectionToolbar(); }
+let _scrollDismissTimer = null;
+function _dismissOnScroll() {
+  // Debounce scroll dismissal so small scroll adjustments don't kill the selection
+  clearTimeout(_scrollDismissTimer);
+  _scrollDismissTimer = setTimeout(() => dismissSelectionToolbar(), 600);
+}
 
 function dismissSelectionToolbar() {
   const toolbar = document.getElementById('selection-toolbar');

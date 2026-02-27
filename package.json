@@ -1,10 +1,13 @@
 {
   "name": "pdf-reader-pro",
-  "version": "1.0.0",
-  "description": "The most natural way to read, annotate, and study PDFs",
+  "version": "2.0.0",
+  "description": "Professional PDF reader — fast, smooth, handles 1000+ pages",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "npx serve public",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "icons": "node scripts/generate-icons.js",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android"
@@ -19,6 +22,8 @@
     "@capacitor/status-bar": "^5.0.0"
   },
   "devDependencies": {
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.0",
+    "vite": "^5.4.0",
+    "terser": "^5.31.0"
   }
 }

@@ -58,7 +58,18 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
 
     const id = generateId();
-    const data = await file.arrayBuffer();
+    let data: ArrayBuffer;
+    try {
+      data = await file.arrayBuffer();
+    } catch {
+      // Fallback for older mobile browsers
+      data = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsArrayBuffer(file);
+      });
+    }
 
     // Validate PDF magic bytes (%PDF)
     const header = new Uint8Array(data, 0, Math.min(4, data.byteLength));

@@ -1,10 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Configure pdf.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// Configure pdf.js worker using Vite's ?url import for reliable resolution
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 export type PDFDocumentProxy = pdfjsLib.PDFDocumentProxy;
 export type PDFPageProxy = pdfjsLib.PDFPageProxy;

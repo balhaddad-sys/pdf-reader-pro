@@ -47,8 +47,10 @@ export function LibraryView() {
             await openDocument(id);
             setViewMode('reader');
           }
-        } catch {
-          addToast(`Failed to import "${file.name}"`, 'error');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          console.error(`Failed to import "${file.name}":`, err);
+          addToast(`Failed to import "${file.name}": ${msg}`, 'error');
         }
       }
     },

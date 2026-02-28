@@ -53,8 +53,18 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   importFile: async (file: File) => {
+    if (file.size === 0) {
+      throw new Error('The selected file is empty');
+    }
+
     const id = generateId();
     const data = await file.arrayBuffer();
+
+    // Validate PDF magic bytes (%PDF)
+    const header = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+    if (header[0] !== 0x25 || header[1] !== 0x50 || header[2] !== 0x44 || header[3] !== 0x46) {
+      throw new Error('The file is not a valid PDF');
+    }
 
     // Load PDF to get metadata
     const pdf = await loadPDF(data);

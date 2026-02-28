@@ -1,6 +1,10 @@
-import { useState, useCallback, type ReactNode, type DragEvent } from 'react';
+import { useState, useCallback, useRef, type ReactNode, type DragEvent } from 'react';
 import { Upload } from 'lucide-react';
 import { cn } from '@/utils/helpers';
+
+function isPdfFile(f: File): boolean {
+  return f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+}
 
 interface DropZoneProps {
   onDrop: (files: File[]) => void;
@@ -11,6 +15,7 @@ interface DropZoneProps {
 
 export function DropZone({ onDrop, children, className, fullScreen }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const dragDepth = useRef(0);
 
   const handleDrag = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -20,7 +25,8 @@ export function DropZone({ onDrop, children, className, fullScreen }: DropZonePr
   const handleDragIn = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer?.items?.length) {
+    dragDepth.current++;
+    if (dragDepth.current === 1) {
       setIsDragging(true);
     }
   }, []);
@@ -28,18 +34,21 @@ export function DropZone({ onDrop, children, className, fullScreen }: DropZonePr
   const handleDragOut = useCallback((e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    dragDepth.current--;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDrop = useCallback(
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      dragDepth.current = 0;
       setIsDragging(false);
 
-      const files = Array.from(e.dataTransfer?.files || []).filter(
-        f => f.type === 'application/pdf',
-      );
+      const files = Array.from(e.dataTransfer?.files || []).filter(isPdfFile);
       if (files.length > 0) {
         onDrop(files);
       }

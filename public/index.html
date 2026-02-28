@@ -3029,8 +3029,18 @@ function escapeHtml(s) {
 
 // ===== FILE HANDLING =====
 async function handleFileOpen(file) {
-  if (!file || file.type !== 'application/pdf') {
+  if (!file) {
     showToast('Please select a valid PDF file');
+    return;
+  }
+  const isPdfType = file.type === 'application/pdf';
+  const isPdfExt = /\.pdf$/i.test(file.name);
+  if (!isPdfType && !isPdfExt) {
+    showToast('Please select a valid PDF file');
+    return;
+  }
+  if (file.size === 0) {
+    showToast('The selected file is empty');
     return;
   }
   store.setState({ loading: true, loadProgress: 0, view: 'reader' });
@@ -3038,6 +3048,13 @@ async function handleFileOpen(file) {
   try {
     // Read file buffer and make a copy for IndexedDB before pdf.js detaches the original
     const arrayBuffer = await file.arrayBuffer();
+    // Validate PDF magic bytes (%PDF)
+    const header = new Uint8Array(arrayBuffer, 0, Math.min(4, arrayBuffer.byteLength));
+    if (header[0] !== 0x25 || header[1] !== 0x50 || header[2] !== 0x44 || header[3] !== 0x46) {
+      store.setState({ loading: false, loadProgress: 0, view: 'library' });
+      showToast('The file is not a valid PDF');
+      return;
+    }
     const bufferForDB = arrayBuffer.slice(0);
 
     const { doc, pageCount, outline } = await engine.loadFromBuffer(arrayBuffer, (pct) => {
@@ -3068,7 +3085,10 @@ async function handleFileOpen(file) {
     }
 
     // Persist PDF data to IndexedDB (using the pre-detachment copy)
-    docStorage.saveFile(docInfo.id, bufferForDB).catch(() => {});
+    docStorage.saveFile(docInfo.id, bufferForDB).catch((err) => {
+      console.warn('Failed to save PDF to local storage:', err);
+      showToast('Warning: PDF could not be saved locally');
+    });
 
     store.setState({
       currentDoc: docInfo,
@@ -4919,12 +4939,23 @@ function attachLibraryEvents() {
 }
 
 function setupDragDrop() {
-  document.addEventListener('dragover', (e) => { e.preventDefault(); if (!store.getState().isDragging) store.setState({ isDragging: true }); });
+  let dragDepth = 0;
+  document.addEventListener('dragover', (e) => { e.preventDefault(); });
+  document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragDepth++;
+    if (dragDepth === 1) store.setState({ isDragging: true });
+  });
   document.addEventListener('dragleave', (e) => {
-    if (e.relatedTarget === null) store.setState({ isDragging: false });
+    dragDepth--;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      store.setState({ isDragging: false });
+    }
   });
   document.addEventListener('drop', (e) => {
     e.preventDefault();
+    dragDepth = 0;
     store.setState({ isDragging: false });
     const file = e.dataTransfer.files[0];
     if (file) handleFileOpen(file);

@@ -200,8 +200,6 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // Capture pointer so move/up fire even if finger leaves the element
-      (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
       if (!activeTab) return;
       const point = getPoint(e);
 
@@ -278,6 +276,9 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       // ── Freehand & Shapes ────────────────────────────────────────────────────
       if (activeTool !== 'freehand' && activeTool !== 'shape') return;
 
+      // Capture pointer here (only for stroke tools) so pointermove/up fire
+      // even if the finger leaves the canvas mid-stroke
+      (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
       setIsDrawing(true);
       pointsRef.current = [point];
 

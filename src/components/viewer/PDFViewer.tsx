@@ -263,13 +263,20 @@ export function PDFViewer() {
 
     const onTouchEnd = () => { pinchDist = 0; };
 
+    // iOS Safari fires 'gesturechange' for pinch — preventDefault stops native zoom
+    const onGestureChange = (e: Event) => e.preventDefault();
+
     container.addEventListener('touchstart', onTouchStart, { passive: true });
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd);
+    container.addEventListener('gesturestart', onGestureChange, { passive: false });
+    container.addEventListener('gesturechange', onGestureChange, { passive: false });
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('gesturestart', onGestureChange);
+      container.removeEventListener('gesturechange', onGestureChange);
     };
   }, [scrollRoot, updateTab]);
 
@@ -288,7 +295,7 @@ export function PDFViewer() {
 
   const pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1);
   const isDrawingMode = activeTool === 'freehand' || activeTool === 'eraser' || activeTool === 'shape'
-    || activeTool === 'text' || activeTool === 'signature' || activeTool === 'stamp';
+    || activeTool === 'text' || activeTool === 'note' || activeTool === 'signature' || activeTool === 'stamp';
 
   // Determine initial starting page (resume position)
   const startPage = activeTab.page;
@@ -304,7 +311,6 @@ export function PDFViewer() {
           'bg-surface-0',
           isDrawingMode && 'cursor-crosshair',
         )}
-        style={{ touchAction: 'pan-x pan-y' }}
         onScroll={handleScroll}
       >
         <div className={cn(

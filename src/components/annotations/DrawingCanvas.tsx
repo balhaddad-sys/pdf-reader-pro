@@ -321,11 +321,17 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
 
       // ── Eraser ──────────────────────────────────────────────────────────────
       if (activeTool === 'eraser') {
+        // Touch input is far less precise than a mouse cursor — use a larger
+        // hit radius so the user doesn't have to tap pixel-perfectly.
+        const isTouch = e.pointerType === 'touch';
+        const freehandRadius = (isTouch ? 30 : 15) / zoom;
+        const placedRadius   = (isTouch ? 50 : 30) / zoom;
+
         const pageAnnotations = annotations.filter(a => a.page === pageNumber);
         for (const ann of pageAnnotations) {
           if (ann.type === 'freehand' && ann.points) {
             for (const p of ann.points) {
-              if (Math.sqrt((p.x - point.x) ** 2 + (p.y - point.y) ** 2) < 15) {
+              if (Math.sqrt((p.x - point.x) ** 2 + (p.y - point.y) ** 2) < freehandRadius) {
                 removeAnnotation(ann.id);
                 return;
               }
@@ -335,7 +341,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
             (ann.type === 'shape' || ann.type === 'text' || ann.type === 'signature' || ann.type === 'stamp') &&
             ann.position
           ) {
-            if (Math.abs(ann.position.x - point.x) < 30 && Math.abs(ann.position.y - point.y) < 30) {
+            if (Math.abs(ann.position.x - point.x) < placedRadius && Math.abs(ann.position.y - point.y) < placedRadius) {
               removeAnnotation(ann.id);
               return;
             }
@@ -504,7 +510,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
 
   const handleTextConfirm = useCallback(() => {
     if (!activeTab || !textEditor.value.trim()) {
-      setTextEditor(s => ({ ...s, active: false, value: '' }));
+      setTextEditor((s: TextEditorState) => ({ ...s, active: false, value: '' }));
       return;
     }
     addAnnotation({
@@ -521,7 +527,10 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       fontFamily: 'sans-serif',
     });
     setTextEditor({ active: false, x: 0, y: 0, screenX: 0, screenY: 0, value: '' });
-  }, [activeTab, textEditor, activeTool, activeColor, zoom, pageNumber, addAnnotation]);
+    // On touch devices, deselect the tool after placing so the user can
+    // immediately scroll or pan without the tool still being armed.
+    if (navigator.maxTouchPoints > 0) setActiveTool(null);
+  }, [activeTab, textEditor, activeTool, activeColor, zoom, pageNumber, addAnnotation, setActiveTool]);
 
   const isInteractive = activeTool === 'freehand' || activeTool === 'eraser'
     || activeTool === 'shape' || activeTool === 'text' || activeTool === 'note'

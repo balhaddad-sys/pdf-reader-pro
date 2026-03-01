@@ -4,6 +4,7 @@ import {
   MessageSquare, Pencil, Eraser, Square, Undo2, Redo2,
   Type, PenLine, Stamp, Circle, Minus, MoveRight,
 } from 'lucide-react';
+import { Tooltip } from '@/components/common/Tooltip';
 import { IconButton } from '@/components/common/IconButton';
 import { useUIStore } from '@/stores/uiStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
@@ -20,25 +21,24 @@ interface ToolDef {
 }
 
 // ─── Tool list ────────────────────────────────────────────────────────────────
-// All tools in one flat array — no "More" button needed.
-// Scroll horizontally on mobile to access any tool instantly.
+// All tools in one flat array — always visible, scroll horizontally on mobile.
 
 const allTools: ToolDef[] = [
-  { id: 'select',        icon: MousePointer2, label: 'Select',        shortcut: 'V' },
-  { id: 'highlight',     icon: Highlighter,   label: 'Highlight',     shortcut: 'H' },
-  { id: 'underline',     icon: Underline,     label: 'Underline',     shortcut: 'U' },
-  { id: 'strikethrough', icon: Strikethrough, label: 'Strikethrough' },
+  { id: 'select',        icon: MousePointer2, label: 'Select',    shortcut: 'V' },
+  { id: 'highlight',     icon: Highlighter,   label: 'Highlight', shortcut: 'H' },
+  { id: 'underline',     icon: Underline,     label: 'Underline', shortcut: 'U' },
+  { id: 'strikethrough', icon: Strikethrough, label: 'Strike' },
   { id: 'squiggly',      icon: Underline,     label: 'Squiggly' },
-  { id: 'freehand',      icon: Pencil,        label: 'Draw',          shortcut: 'P' },
-  { id: 'eraser',        icon: Eraser,        label: 'Eraser',        shortcut: 'E' },
-  { id: 'note',          icon: MessageSquare, label: 'Note',          shortcut: 'N' },
-  { id: 'text',          icon: Type,          label: 'Text',          shortcut: 'T' },
-  { id: 'shape',         icon: Square,        label: 'Shape',         shortcut: 'S' },
-  { id: 'signature',     icon: PenLine,       label: 'Signature' },
+  { id: 'freehand',      icon: Pencil,        label: 'Draw',      shortcut: 'P' },
+  { id: 'eraser',        icon: Eraser,        label: 'Eraser',    shortcut: 'E' },
+  { id: 'note',          icon: MessageSquare, label: 'Note',      shortcut: 'N' },
+  { id: 'text',          icon: Type,          label: 'Text',      shortcut: 'T' },
+  { id: 'shape',         icon: Square,        label: 'Shape',     shortcut: 'S' },
+  { id: 'signature',     icon: PenLine,       label: 'Sign' },
   { id: 'stamp',         icon: Stamp,         label: 'Stamp' },
 ];
 
-// Visual group separators: a thin divider is inserted BEFORE these tool IDs.
+// Thin divider inserted BEFORE these IDs to group related tools visually.
 const GROUP_START = new Set<AnnotationTool>(['highlight', 'freehand', 'note', 'shape']);
 
 const shapeTypes: { id: ShapeSubType; icon: typeof Square; label: string }[] = [
@@ -49,6 +49,47 @@ const shapeTypes: { id: ShapeSubType; icon: typeof Square; label: string }[] = [
 ];
 
 const STROKE_WIDTHS = [1, 2, 4, 8];
+
+// ─── ToolButton ───────────────────────────────────────────────────────────────
+// Mobile: 44px tall with icon + text label for easy tapping and identification.
+// Desktop: 28px icon-only button with a hover tooltip.
+
+interface ToolButtonProps {
+  tool: ToolDef;
+  active: boolean;
+  onClick: () => void;
+}
+
+function ToolButton({ tool, active, onClick }: ToolButtonProps) {
+  const btn = (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex flex-col items-center justify-center shrink-0 rounded-xl transition-all duration-150',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50',
+        // Mobile: 44 × 44px with label; Desktop: 28 × 28px icon-only
+        'w-11 h-11 gap-[3px] md:w-7 md:h-7 md:gap-0',
+        active
+          ? 'bg-brand-500/25 text-brand-400 ring-1 ring-brand-500/40'
+          : 'text-on-surface-secondary hover:bg-white/10 active:bg-white/15 hover:text-on-surface',
+      )}
+    >
+      {/* Icon — slightly larger on mobile for clarity */}
+      <tool.icon className="w-[18px] h-[18px] md:w-[15px] md:h-[15px] shrink-0" />
+      {/* Label — mobile only */}
+      <span className="md:hidden text-[8px] font-medium leading-none select-none">
+        {tool.label}
+      </span>
+    </button>
+  );
+
+  // Wrap with tooltip for desktop hover; tooltip never shows on touch devices
+  return (
+    <Tooltip content={tool.label} shortcut={tool.shortcut} side="top">
+      {btn}
+    </Tooltip>
+  );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -97,47 +138,43 @@ export function AnnotationToolbar() {
   return (
     <div className="shrink-0 bg-surface-1 border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
-      {/* ── Main toolbar row ──────────────────────────────────────────────────
-           All tools are always visible — scroll horizontally on mobile.
-           No "More" button, no hidden tools, no active-tool chip.          */}
+      {/* ── Main toolbar ──────────────────────────────────────────────────────
+           Mobile: 44px tall buttons with icon + label, horizontal scroll.
+           Desktop: 28px icon-only buttons, centered, no scroll needed.      */}
       <div
-        className="flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 md:justify-center md:px-3 md:h-12 md:py-0"
+        className="flex items-center gap-0.5 overflow-x-auto px-2 py-1 md:justify-center md:px-3 md:h-12 md:py-0"
         style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
       >
-        {/* Tool buttons with visual group separators */}
+        {/* All tools */}
         <div className="flex items-center gap-0.5 shrink-0">
           {allTools.map(tool => (
             <React.Fragment key={tool.id}>
               {GROUP_START.has(tool.id) && (
-                <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
+                <div className="w-px h-6 bg-border mx-0.5 shrink-0" />
               )}
-              <IconButton
-                tooltip={tool.label}
-                shortcut={tool.shortcut}
-                tooltipSide="top"
-                size="sm"
+              <ToolButton
+                tool={tool}
                 active={activeTool === tool.id}
                 onClick={() => handleToolClick(tool.id)}
-              >
-                <tool.icon size={16} />
-              </IconButton>
+              />
             </React.Fragment>
           ))}
         </div>
 
         <div className="w-px h-6 bg-border mx-1 shrink-0" />
 
-        {/* Color swatches — inline so they're reachable by scrolling on mobile */}
+        {/* Color swatches — inline, scroll with toolbar on mobile */}
         {showColorPicker && (
           <>
-            <div className="flex items-center gap-1.5 px-1 shrink-0">
+            <div className="flex items-center gap-2 px-1 shrink-0">
               {HIGHLIGHT_COLORS.map(color => (
                 <button
                   key={color.value}
                   onClick={() => setActiveColor(color.value)}
                   className={cn(
                     'rounded-full transition-all border-2 shrink-0',
-                    'w-7 h-7 md:w-5 md:h-5',
+                    // 32px on mobile (good tap target), 20px on desktop
+                    'w-8 h-8 md:w-5 md:h-5',
                     activeColor === color.value
                       ? 'border-white scale-110 shadow-glow'
                       : 'border-transparent hover:scale-105',

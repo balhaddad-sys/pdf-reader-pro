@@ -233,8 +233,9 @@ export function PDFViewer() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [activeTab, updateTab]);
 
-  // Pinch-to-zoom via touch events (iOS Safari and other browsers)
-  // Uses activeTabRef so we never re-add listeners on every zoom change
+  // Pinch-to-zoom via touch distance (works on all browsers).
+  // Native browser zoom is blocked via viewport maximum-scale=1.0, so we
+  // don't need preventDefault here — passive listeners give better scroll perf.
   useEffect(() => {
     const container = scrollRoot;
     if (!container) return;
@@ -247,7 +248,6 @@ export function PDFViewer() {
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        e.preventDefault(); // block browser from committing to native zoom at touchstart
         pinchDist = getDist(e.touches);
         pinchZoom = activeTabRef.current?.zoom ?? 1;
       }
@@ -255,7 +255,6 @@ export function PDFViewer() {
 
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || pinchDist === 0) return;
-      e.preventDefault(); // prevent native browser zoom
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
       const tab = activeTabRef.current;
@@ -264,20 +263,13 @@ export function PDFViewer() {
 
     const onTouchEnd = () => { pinchDist = 0; };
 
-    // iOS Safari fires 'gesturechange' for pinch — preventDefault stops native zoom
-    const onGestureChange = (e: Event) => e.preventDefault();
-
-    container.addEventListener('touchstart', onTouchStart, { passive: false });
-    container.addEventListener('touchmove', onTouchMove, { passive: false });
-    container.addEventListener('touchend', onTouchEnd);
-    container.addEventListener('gesturestart', onGestureChange, { passive: false });
-    container.addEventListener('gesturechange', onGestureChange, { passive: false });
+    container.addEventListener('touchstart', onTouchStart, { passive: true });
+    container.addEventListener('touchmove', onTouchMove, { passive: true });
+    container.addEventListener('touchend', onTouchEnd, { passive: true });
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
-      container.removeEventListener('gesturestart', onGestureChange);
-      container.removeEventListener('gesturechange', onGestureChange);
     };
   }, [scrollRoot, updateTab]);
 

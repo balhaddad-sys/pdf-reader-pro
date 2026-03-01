@@ -2,17 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#6366f1" />
     <meta name="description" content="Professional PDF reader, annotator, and document manager. Read, highlight, annotate, and organize your PDFs with a beautiful, privacy-first experience." />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <title>PDF Reader Pro</title>
+  <script>
+    // Auto-reload when a new service worker takes control (ensures fresh code after updates)
+    if ('serviceWorker' in navigator) {
+      let prevController = navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (prevController) window.location.reload();
+        prevController = navigator.serviceWorker.controller;
+      });
+    }
+  </script>
   </head>
   <body class="bg-surface-0 text-on-surface antialiased">
     <div id="root"></div>

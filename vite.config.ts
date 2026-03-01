@@ -1,13 +1,35 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { fileURLToPath } from 'url';
 
+// When building for Capacitor (Android/iOS), set CAPACITOR=true
+// e.g.  cross-env CAPACITOR=true vite build
+const isCapacitor = process.env.CAPACITOR === 'true';
+
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/pdf-reader-pro/' : '/',
+  // Capacitor serves from capacitor://localhost — must use relative paths
+  base: isCapacitor
+    ? './'
+    : process.env.GITHUB_ACTIONS ? '/pdf-reader-pro/' : '/',
+
   plugins: [
     react(),
-    VitePWA({
+
+    // Always copy CMap files so PDF text renders correctly offline
+    // (replaces the CDN URL in src/utils/pdf.ts → local cmaps/ folder)
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'node_modules/pdfjs-dist/cmaps/*',
+          dest: 'cmaps',
+        },
+      ],
+    }),
+
+    // PWA service worker only for web builds — not needed inside an APK
+    ...(!isCapacitor ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
@@ -45,16 +67,19 @@ export default defineConfig({
           },
         ],
       },
-    }),
+    })] : []),
   ],
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+
   optimizeDeps: {
     include: ['pdfjs-dist'],
   },
+
   build: {
     target: 'esnext',
     rollupOptions: {

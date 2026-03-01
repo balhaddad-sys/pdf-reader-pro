@@ -15,10 +15,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <title>PDF Reader Pro</title>
   <script>
-    // Auto-reload when a new service worker takes control (ensures fresh code after updates)
-    if ('serviceWorker' in navigator) {
-      let prevController = navigator.serviceWorker.controller;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Auto-reload when a new service worker takes control (web PWA only).
+    // Skip inside Capacitor — the APK already ships the latest assets.
+    var isCapacitor = window.location.protocol === 'capacitor:'
+      || navigator.userAgent.includes('wv')
+      || window.hasOwnProperty('Capacitor');
+    if (!isCapacitor && 'serviceWorker' in navigator) {
+      var prevController = navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
         if (prevController) window.location.reload();
         prevController = navigator.serviceWorker.controller;
       });

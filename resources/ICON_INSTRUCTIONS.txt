@@ -1,0 +1,21 @@
+Place your app icon here as:
+  resources/icon.png         (1024×1024 PNG, no transparency — required)
+  resources/splash.png       (2732×2732 PNG — optional, for splash screen)
+  resources/icon-background.png  (1024×1024, solid color for adaptive icon — optional)
+
+Then run:
+  npx capacitor-assets generate
+
+This generates all required Android launcher icon sizes:
+  android/app/src/main/res/mipmap-mdpi/ic_launcher.png      (48×48)
+  android/app/src/main/res/mipmap-hdpi/ic_launcher.png      (72×72)
+  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png     (96×96)
+  android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png    (144×144)
+  android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png   (192×192)
+  Plus adaptive icon foreground/background layers for Android 8+
+
+TIPS:
+- Use a 1024×1024 PNG exported from your design tool (Figma, Photoshop, etc.)
+- Background should be solid (no transparency) for the Play Store listing
+- Keep important content within the inner 75% of the canvas (safe zone for adaptive icons)
+- The Play Store also needs a 512×512 PNG for the store listing icon

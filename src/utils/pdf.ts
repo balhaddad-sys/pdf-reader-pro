@@ -11,7 +11,9 @@ export type PDFPageProxy = pdfjsLib.PDFPageProxy;
 export async function loadPDF(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentProxy> {
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(data),
-    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9.155/cmaps/',
+    // Local cmaps/ folder — bundled at build time by vite-plugin-static-copy.
+    // Works offline (required for Android / Capacitor).
+    cMapUrl: 'cmaps/',
     cMapPacked: true,
     enableXfa: true,
   });

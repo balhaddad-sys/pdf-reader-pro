@@ -1,0 +1,71 @@
+<!--
+  ============================================================
+  AndroidManifest.xml patch for PDF Reader Pro
+  ============================================================
+
+  INSTRUCTIONS:
+  After running "npx cap add android", open:
+    android/app/src/main/AndroidManifest.xml
+
+  1. Add these PERMISSIONS inside <manifest> (before <application>):
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+  2. Add android:exported="true" to the existing <activity> tag:
+
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        ...rest of existing attributes...>
+
+  3. Add these INTENT FILTERS inside the <activity> tag
+     (after the existing <intent-filter> block):
+
+    <!-- Open PDF files via "Open with" / file manager -->
+    <intent-filter android:label="PDF Reader Pro">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:mimeType="application/pdf" />
+    </intent-filter>
+
+    <!-- Receive PDFs shared from other apps -->
+    <intent-filter android:label="PDF Reader Pro">
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="application/pdf" />
+    </intent-filter>
+
+  ============================================================
+  COMPLETE EXAMPLE of the patched <activity> tag:
+  ============================================================
+
+  <activity
+      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+      android:name=".MainActivity"
+      android:label="@string/title_activity_main"
+      android:theme="@style/AppTheme.NoActionBarLaunch"
+      android:exported="true"
+      android:launchMode="singleTask">
+
+      <intent-filter>
+          <action android:name="android.intent.action.MAIN" />
+          <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+
+      <intent-filter android:label="PDF Reader Pro">
+          <action android:name="android.intent.action.VIEW" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <category android:name="android.intent.category.BROWSABLE" />
+          <data android:mimeType="application/pdf" />
+      </intent-filter>
+
+      <intent-filter android:label="PDF Reader Pro">
+          <action android:name="android.intent.action.SEND" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="application/pdf" />
+      </intent-filter>
+  </activity>
+-->

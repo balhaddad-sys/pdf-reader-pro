@@ -29,7 +29,7 @@ jobs:
 
       # ── Web build ──────────────────────────────────────────────────────────
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build web assets (Capacitor mode)
         run: npm run build:android

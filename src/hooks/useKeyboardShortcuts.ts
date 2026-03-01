@@ -113,6 +113,7 @@ export function useKeyboardShortcuts() {
             p: 'freehand',
             e: 'eraser',
             s: 'shape',
+            t: 'text',
           };
 
           const tool = toolMap[e.key.toLowerCase()];

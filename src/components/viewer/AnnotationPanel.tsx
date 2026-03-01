@@ -1,4 +1,4 @@
-import { MessageSquare, Highlighter, Underline, Strikethrough, Pencil, Trash2, Type } from 'lucide-react';
+import { MessageSquare, Highlighter, Underline, Strikethrough, Pencil, Trash2, Type, PenLine, Stamp } from 'lucide-react';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { formatDate, cn } from '@/utils/helpers';
@@ -8,20 +8,26 @@ const typeIcons: Record<AnnotationType, typeof Highlighter> = {
   highlight: Highlighter,
   underline: Underline,
   strikethrough: Strikethrough,
+  squiggly: Underline,
   note: MessageSquare,
   freehand: Pencil,
   shape: Type,
   text: Type,
+  signature: PenLine,
+  stamp: Stamp,
 };
 
 const typeLabels: Record<AnnotationType, string> = {
   highlight: 'Highlight',
   underline: 'Underline',
   strikethrough: 'Strikethrough',
+  squiggly: 'Squiggly',
   note: 'Note',
   freehand: 'Drawing',
   shape: 'Shape',
-  text: 'Text',
+  text: 'Text Box',
+  signature: 'Signature',
+  stamp: 'Stamp',
 };
 
 export function AnnotationPanel() {
@@ -34,7 +40,6 @@ export function AnnotationPanel() {
   const activeTab = tabs.find(t => t.id === activeTabId);
   const sorted = [...annotations].sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
 
-  // Group by page
   const byPage = sorted.reduce<Record<number, typeof sorted>>((acc, ann) => {
     (acc[ann.page] ??= []).push(ann);
     return acc;
@@ -63,7 +68,7 @@ export function AnnotationPanel() {
               Page {page}
             </button>
             {anns.map(ann => {
-              const Icon = typeIcons[ann.type];
+              const Icon = typeIcons[ann.type] ?? Type;
               return (
                 <div
                   key={ann.id}
@@ -80,11 +85,10 @@ export function AnnotationPanel() {
                     <p className="text-xs text-on-surface">
                       {ann.selectedText
                         ? `"${ann.selectedText.slice(0, 60)}${ann.selectedText.length > 60 ? '...' : ''}"`
-                        : typeLabels[ann.type]}
+                        : ann.content
+                          ? ann.content.slice(0, 60)
+                          : typeLabels[ann.type]}
                     </p>
-                    {ann.content && (
-                      <p className="text-2xs text-on-surface-secondary mt-0.5 truncate">{ann.content}</p>
-                    )}
                     <p className="text-2xs text-on-surface-secondary mt-0.5">{formatDate(ann.createdAt)}</p>
                   </div>
                   <button

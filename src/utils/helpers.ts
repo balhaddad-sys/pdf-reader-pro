@@ -95,3 +95,43 @@ export const ANNOTATION_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899',
   '#000000', '#ffffff',
 ] as const;
+
+export const STAMP_DEFINITIONS = [
+  { id: 'approved', label: 'APPROVED', color: '#16a34a', borderColor: '#16a34a', bgColor: '#f0fdf4' },
+  { id: 'rejected', label: 'REJECTED', color: '#dc2626', borderColor: '#dc2626', bgColor: '#fef2f2' },
+  { id: 'draft', label: 'DRAFT', color: '#2563eb', borderColor: '#2563eb', bgColor: '#eff6ff' },
+  { id: 'confidential', label: 'CONFIDENTIAL', color: '#dc2626', borderColor: '#dc2626', bgColor: '#fef2f2' },
+  { id: 'reviewed', label: 'REVIEWED', color: '#0d9488', borderColor: '#0d9488', bgColor: '#f0fdfa' },
+  { id: 'for-review', label: 'FOR REVIEW', color: '#d97706', borderColor: '#d97706', bgColor: '#fffbeb' },
+  { id: 'final', label: 'FINAL', color: '#7c3aed', borderColor: '#7c3aed', bgColor: '#f5f3ff' },
+  { id: 'void', label: 'VOID', color: '#6b7280', borderColor: '#6b7280', bgColor: '#f9fafb' },
+] as const;
+
+export function generateStampImage(label: string, color: string, bgColor: string): string {
+  const canvas = document.createElement('canvas');
+  const padding = 20;
+  const fontSize = 28;
+  const borderWidth = 3;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  const textWidth = ctx.measureText(label).width;
+
+  canvas.width = textWidth + padding * 2;
+  canvas.height = fontSize + padding * 1.5;
+
+  ctx.fillStyle = bgColor + 'dd';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = borderWidth;
+  ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, canvas.width / 2, canvas.height / 2);
+
+  return canvas.toDataURL('image/png');
+}

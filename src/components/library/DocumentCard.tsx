@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Star, MoreVertical, Trash2, FileText, Clock } from 'lucide-react';
+import { Star, MoreVertical, Trash2, FileText, Clock, Loader2 } from 'lucide-react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { formatFileSize, formatDate, cn } from '@/utils/helpers';
@@ -8,10 +8,11 @@ import type { PDFDocument, LibraryLayout } from '@/types';
 interface DocumentCardProps {
   document: PDFDocument;
   layout: LibraryLayout;
+  isLoading?: boolean;
   onOpen: () => void;
 }
 
-export function DocumentCard({ document, layout, onOpen }: DocumentCardProps) {
+export function DocumentCard({ document, layout, isLoading = false, onOpen }: DocumentCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
   const removeDocument = useDocumentStore(s => s.removeDocument);
@@ -27,11 +28,18 @@ export function DocumentCard({ document, layout, onOpen }: DocumentCardProps) {
     return (
       <div
         className={cn(
-          'group flex items-center gap-4 px-4 py-3 rounded-xl transition-all cursor-pointer',
+          'group relative flex items-center gap-4 px-4 py-3 rounded-xl transition-all cursor-pointer',
           'hover:bg-surface-2 active:bg-surface-3',
+          isLoading && 'pointer-events-none',
         )}
         onClick={onOpen}
       >
+        {/* Loading overlay — list */}
+        {isLoading && (
+          <div className="absolute inset-0 rounded-xl bg-surface-0/70 backdrop-blur-sm flex items-center justify-center z-10">
+            <Loader2 size={18} className="animate-spin text-brand-400" />
+          </div>
+        )}
         {/* Thumbnail */}
         <div className="w-10 h-13 rounded-lg bg-surface-3 overflow-hidden shrink-0 flex items-center justify-center shadow-sm">
           {document.thumbnail ? (
@@ -97,9 +105,18 @@ export function DocumentCard({ document, layout, onOpen }: DocumentCardProps) {
         'bg-surface-2 hover:bg-surface-3 active:scale-[0.98]',
         'border border-border hover:border-border-strong',
         'shadow-elevation-1 hover:shadow-elevation-2',
+        isLoading && 'pointer-events-none',
       )}
       onClick={onOpen}
     >
+      {/* Loading overlay — grid */}
+      {isLoading && (
+        <div className="absolute inset-0 rounded-2xl bg-surface-0/75 backdrop-blur-sm flex flex-col items-center justify-center z-10 gap-2">
+          <Loader2 size={24} className="animate-spin text-brand-400" />
+          <span className="text-2xs text-on-surface-secondary">Opening…</span>
+        </div>
+      )}
+
       {/* Thumbnail */}
       <div className="relative aspect-[3/4] rounded-t-2xl overflow-hidden bg-surface-3">
         {document.thumbnail ? (

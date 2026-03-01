@@ -1,4 +1,4 @@
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { renderPageThumbnail } from '@/utils/pdf';
 import { cn } from '@/utils/helpers';
@@ -44,10 +44,32 @@ const ThumbnailItem = memo(function ThumbnailItem({
   isActive,
   onClick,
 }: ThumbnailItemProps) {
+  const wrapperRef = useRef<HTMLButtonElement>(null);
+  // Only render the thumbnail once the item scrolls near the viewport
+  const [isVisible, setIsVisible] = useState(false);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const getPdfInstance = useDocumentStore(s => s.getPdfInstance);
 
+  // Observe visibility — defer canvas work until the item is near the scroll viewport
   useEffect(() => {
+    if (isVisible) return; // already triggered, no need to keep observing
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setIsVisible(true); },
+      // Use the closest scrolling ancestor (the sidebar scroll area) as root
+      { rootMargin: '300px 0px', threshold: 0 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  // Render thumbnail only once visible
+  useEffect(() => {
+    if (!isVisible) return;
+
     let cancelled = false;
     const pdf = getPdfInstance(documentId);
     if (!pdf) return;
@@ -56,15 +78,15 @@ const ThumbnailItem = memo(function ThumbnailItem({
       if (cancelled) return;
       return renderPageThumbnail(page, 160);
     }).then(dataUrl => {
-      if (cancelled && dataUrl) return;
-      if (dataUrl) setThumbnail(dataUrl);
+      if (!cancelled && dataUrl) setThumbnail(dataUrl);
     }).catch(() => {});
 
     return () => { cancelled = true; };
-  }, [documentId, pageNumber, getPdfInstance]);
+  }, [isVisible, documentId, pageNumber, getPdfInstance]);
 
   return (
     <button
+      ref={wrapperRef}
       onClick={onClick}
       className={cn(
         'relative rounded-lg overflow-hidden transition-all',

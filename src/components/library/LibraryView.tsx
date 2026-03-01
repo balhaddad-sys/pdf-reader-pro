@@ -1,7 +1,7 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import {
   Search, Upload, Grid3X3, List, SortAsc, Plus,
-  FileText, Star, Clock, ArrowUpDown,
+  FileText, Star, Clock, ArrowUpDown, Loader2,
 } from 'lucide-react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -28,9 +28,11 @@ export function LibraryView() {
   const setLibraryLayout = useDocumentStore(s => s.setLibraryLayout);
   const librarySearch = useDocumentStore(s => s.librarySearch);
   const setLibrarySearch = useDocumentStore(s => s.setLibrarySearch);
+  const openingDocumentId = useDocumentStore(s => s.openingDocumentId);
   const setViewMode = useUIStore(s => s.setViewMode);
   const addToast = useUIStore(s => s.addToast);
 
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export function LibraryView() {
 
   const handleImport = useCallback(
     async (files: File[]) => {
+      setImporting(true);
       for (const file of files) {
         try {
           const id = await importFile(file);
@@ -47,10 +50,12 @@ export function LibraryView() {
             await openDocument(id);
             setViewMode('reader');
           }
-        } catch {
-          addToast(`Failed to import "${file.name}"`, 'error');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          addToast(`Failed to import "${file.name}": ${msg}`, 'error');
         }
       }
+      setImporting(false);
     },
     [importFile, openDocument, setViewMode, addToast],
   );
@@ -97,14 +102,18 @@ export function LibraryView() {
           </div>
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
             className={cn(
               'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all',
               'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700',
               'shadow-elevation-2 hover:shadow-elevation-3',
+              'disabled:opacity-60 disabled:cursor-not-allowed',
             )}
           >
-            <Plus size={16} />
-            Open PDF
+            {importing
+              ? <Loader2 size={16} className="animate-spin" />
+              : <Plus size={16} />}
+            {importing ? 'Importing…' : 'Open PDF'}
           </button>
           <input
             ref={fileInputRef}
@@ -222,6 +231,7 @@ export function LibraryView() {
                   key={doc.id}
                   document={doc}
                   layout={libraryLayout}
+                  isLoading={openingDocumentId === doc.id}
                   onOpen={() => handleOpen(doc.id)}
                 />
               ))}
@@ -247,6 +257,7 @@ export function LibraryView() {
                   key={doc.id}
                   document={doc}
                   layout={libraryLayout}
+                  isLoading={openingDocumentId === doc.id}
                   onOpen={() => handleOpen(doc.id)}
                 />
               ))}

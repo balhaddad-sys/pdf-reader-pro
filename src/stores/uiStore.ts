@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Theme, SidebarPanel, ViewMode, AnnotationTool } from '@/types';
+import type { Theme, SidebarPanel, ViewMode, AnnotationTool, ShapeSubType } from '@/types';
 
 interface UIState {
   // View
@@ -24,6 +24,18 @@ interface UIState {
   setActiveColor: (color: string) => void;
   strokeWidth: number;
   setStrokeWidth: (width: number) => void;
+  shapeSubType: ShapeSubType;
+  setShapeSubType: (type: ShapeSubType) => void;
+
+  // Signature & Stamp placement
+  signatureDialogOpen: boolean;
+  setSignatureDialogOpen: (open: boolean) => void;
+  pendingSignature: string | null;
+  setPendingSignature: (data: string | null) => void;
+  stampPickerOpen: boolean;
+  setStampPickerOpen: (open: boolean) => void;
+  pendingStamp: { imageData: string; label: string } | null;
+  setPendingStamp: (stamp: { imageData: string; label: string } | null) => void;
 
   // Modals & panels
   settingsOpen: boolean;
@@ -73,6 +85,17 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveColor: (color) => set({ activeColor: color }),
   strokeWidth: 2,
   setStrokeWidth: (width) => set({ strokeWidth: width }),
+  shapeSubType: 'rectangle',
+  setShapeSubType: (type) => set({ shapeSubType: type }),
+
+  signatureDialogOpen: false,
+  setSignatureDialogOpen: (open) => set({ signatureDialogOpen: open }),
+  pendingSignature: null,
+  setPendingSignature: (data) => set({ pendingSignature: data }),
+  stampPickerOpen: false,
+  setStampPickerOpen: (open) => set({ stampPickerOpen: open }),
+  pendingStamp: null,
+  setPendingStamp: (stamp) => set({ pendingStamp: stamp }),
 
   settingsOpen: false,
   setSettingsOpen: (open) => set({ settingsOpen: open }),

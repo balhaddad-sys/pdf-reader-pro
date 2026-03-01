@@ -26,19 +26,29 @@ export interface Annotation {
   position?: Point;
   selectedText?: string;
   shape?: ShapeData;
+  imageData?: string;
+  width?: number;
+  height?: number;
+  fontSize?: number;
+  fontFamily?: string;
 }
 
 export type AnnotationType =
   | 'highlight'
   | 'underline'
   | 'strikethrough'
+  | 'squiggly'
   | 'note'
   | 'freehand'
   | 'shape'
-  | 'text';
+  | 'text'
+  | 'signature'
+  | 'stamp';
+
+export type ShapeSubType = 'rectangle' | 'circle' | 'arrow' | 'line';
 
 export interface ShapeData {
-  type: 'rectangle' | 'circle' | 'arrow' | 'line';
+  type: ShapeSubType;
   startX: number;
   startY: number;
   endX: number;
@@ -79,7 +89,7 @@ export type SidebarPanel = 'thumbnails' | 'outline' | 'bookmarks' | 'annotations
 export type ViewMode = 'library' | 'reader';
 export type LibrarySort = 'recent' | 'name' | 'added' | 'size';
 export type LibraryLayout = 'grid' | 'list';
-export type AnnotationTool = 'select' | 'highlight' | 'underline' | 'strikethrough' | 'note' | 'freehand' | 'eraser' | 'shape' | 'text' | null;
+export type AnnotationTool = 'select' | 'highlight' | 'underline' | 'strikethrough' | 'squiggly' | 'note' | 'freehand' | 'eraser' | 'shape' | 'text' | 'signature' | 'stamp' | null;
 
 export interface SearchResult {
   page: number;
@@ -95,4 +105,12 @@ export interface AppSettings {
   showPageLabels: boolean;
   highlightLinks: boolean;
   autoSave: boolean;
+}
+
+export interface StampDefinition {
+  id: string;
+  label: string;
+  color: string;
+  borderColor: string;
+  bgColor: string;
 }

@@ -17,6 +17,39 @@ interface TextEditorState {
   value: string;
 }
 
+// ─── Canvas geometry helpers ──────────────────────────────────────────────────
+
+/** Rounded rectangle path (all four corners). */
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+
+/** Rectangle with rounded left corners only (used for the note accent strip). */
+function roundedRectLeft(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 // ─── Shape drawing helper ─────────────────────────────────────────────────────
 // Caller sets strokeStyle / lineWidth / globalAlpha before calling.
 function drawShapeOnCtx(
@@ -141,25 +174,75 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       drawShapeOnCtx(ctx, type, startX, startY, endX, endY, zoom);
     });
 
-    // ── Notes (sticky notes) ─────────────────────────────────────────────────
+    // ── Notes (prestigious card) ──────────────────────────────────────────────
     pageAnnotations.filter(a => a.type === 'note' && a.position && a.content).forEach(ann => {
-      const x       = ann.position!.x * zoom;
-      const y       = ann.position!.y * zoom;
-      const fontSize = 13 * zoom;
-      ctx.font = `${fontSize}px sans-serif`;
-      const lines = ann.content!.split('\n');
-      const lineH = fontSize * 1.4;
-      const maxW  = Math.max(...lines.map(l => ctx.measureText(l).width), 80 * zoom);
-      const pad   = 6 * zoom;
-      ctx.globalAlpha = 0.95;
-      ctx.fillStyle   = '#fef08a';
-      ctx.fillRect(x - pad, y - fontSize, maxW + pad * 2, lineH * lines.length + pad * 2);
-      ctx.strokeStyle = '#ca8a04';
-      ctx.lineWidth   = 1.5;
-      ctx.strokeRect(x - pad, y - fontSize, maxW + pad * 2, lineH * lines.length + pad * 2);
-      ctx.fillStyle   = '#422006';
+      const x = ann.position!.x * zoom;
+      const y = ann.position!.y * zoom;
+
+      const bodyFs   = 12.5 * zoom;
+      const headerFs = 9 * zoom;
+      const lineH    = bodyFs * 1.65;
+      const padX     = 13 * zoom;
+      const padTop   = 8 * zoom;
+      const padBot   = 11 * zoom;
+      const accentW  = 3.5 * zoom;
+      const headerH  = 22 * zoom;
+      const radius   = 7 * zoom;
+
+      const bodyFont   = `${bodyFs}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
+      const headerFont = `600 ${headerFs}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
+
+      ctx.font = bodyFont;
+      const lines    = ann.content!.split('\n');
+      const maxLineW = Math.max(...lines.map((l: string) => ctx.measureText(l).width), 130 * zoom);
+      const totalW   = accentW + padX + maxLineW + padX;
+      const totalH   = headerH + padTop + lineH * lines.length + padBot;
+
+      // Card background with drop shadow
+      ctx.save();
+      ctx.shadowColor   = 'rgba(0,0,0,0.13)';
+      ctx.shadowBlur    = 14 * zoom;
+      ctx.shadowOffsetY = 4 * zoom;
+      ctx.globalAlpha   = 0.98;
+      ctx.fillStyle     = '#FFFBF0';
+      roundedRect(ctx, x, y, totalW, totalH, radius);
+      ctx.fill();
+      ctx.restore();
+
+      // Amber left accent strip
+      ctx.save();
+      ctx.fillStyle = '#F59E0B';
+      roundedRectLeft(ctx, x, y, accentW, totalH, radius);
+      ctx.fill();
+      ctx.restore();
+
+      // Header / body separator
+      ctx.save();
+      ctx.strokeStyle = 'rgba(245,158,11,0.22)';
+      ctx.lineWidth   = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(x + accentW, y + headerH);
+      ctx.lineTo(x + totalW,  y + headerH);
+      ctx.stroke();
+      ctx.restore();
+
+      // "NOTE" label in header
+      ctx.save();
+      ctx.font        = headerFont;
+      ctx.fillStyle   = '#B45309';
+      ctx.globalAlpha = 0.88;
+      ctx.fillText('NOTE', x + accentW + padX * 0.65, y + headerH * 0.67);
+      ctx.restore();
+
+      // Body text
+      ctx.save();
+      ctx.font      = bodyFont;
+      ctx.fillStyle = '#1C1917';
       ctx.globalAlpha = 1;
-      lines.forEach((line, i) => ctx.fillText(line, x, y + lineH * i));
+      lines.forEach((line, i) =>
+        ctx.fillText(line, x + accentW + padX, y + headerH + padTop + bodyFs * 0.85 + lineH * i),
+      );
+      ctx.restore();
     });
 
     // ── Text boxes ───────────────────────────────────────────────────────────
@@ -446,10 +529,21 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       {/* Inline text editor overlay */}
       {textEditor.active && (
         <div
-          className="absolute z-20"
+          className={`absolute z-20 overflow-hidden ${
+            activeTool === 'note'
+              ? 'rounded-lg shadow-2xl border border-amber-200/80'
+              : 'rounded-t shadow-lg'
+          }`}
           style={{ left: textEditor.x, top: textEditor.y }}
           onPointerDown={e => e.stopPropagation()}
         >
+          {/* Note card header — matches the rendered card */}
+          {activeTool === 'note' && (
+            <div className="flex items-center gap-1.5 px-3 py-[7px] bg-[#FFFBF0] border-b border-amber-200/60 border-l-[3.5px] border-l-amber-400">
+              <span className="text-[9px] font-bold tracking-[0.18em] text-amber-700 uppercase">Note</span>
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             value={textEditor.value}
@@ -464,22 +558,29 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
                 handleTextConfirm();
               }
             }}
-            placeholder={activeTool === 'note' ? 'Write note...' : 'Type text...'}
-            className={`min-w-[160px] min-h-[72px] px-2 py-1.5 text-sm rounded-t border shadow-lg resize-none focus:outline-none block w-full ${
+            placeholder={activeTool === 'note' ? 'Write your note…' : 'Type text...'}
+            className={`min-w-[200px] min-h-[80px] resize-none focus:outline-none block w-full ${
               activeTool === 'note'
-                ? 'bg-yellow-100 border-yellow-400 text-yellow-900'
-                : 'bg-white/95 border-brand-500 text-gray-900'
+                ? 'px-3 py-2.5 text-[13px] leading-relaxed bg-[#FFFBF0] text-stone-800 placeholder:text-amber-700/35 border-l-[3.5px] border-l-amber-400 border-0'
+                : 'px-2 py-1.5 text-sm rounded-t border border-brand-500 bg-white/95 text-gray-900 shadow-lg'
             }`}
             style={activeTool === 'note' ? undefined : { color: activeColor }}
             rows={3}
           />
-          {/* Explicit confirm / cancel buttons */}
-          <div className={`flex rounded-b border-x border-b overflow-hidden ${
-            activeTool === 'note' ? 'border-yellow-400' : 'border-brand-500'
+
+          {/* Action buttons */}
+          <div className={`flex overflow-hidden ${
+            activeTool === 'note'
+              ? 'border-t border-amber-200/60 border-l-[3.5px] border-l-amber-400 bg-[#FFFBF0]'
+              : 'rounded-b border-x border-b border-brand-500'
           }`}>
             <button
               onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
-              className="flex-1 py-1.5 text-xs font-medium bg-brand-500 text-white active:bg-brand-600"
+              className={`flex-1 py-1.5 text-xs font-semibold ${
+                activeTool === 'note'
+                  ? 'text-amber-800 hover:bg-amber-100 active:bg-amber-200'
+                  : 'bg-brand-500 text-white active:bg-brand-600'
+              }`}
             >
               ✓ Done
             </button>
@@ -489,7 +590,11 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
                 setTextEditor({ active: false, x: 0, y: 0, value: '' });
                 setActiveTool(null);
               }}
-              className="flex-1 py-1.5 text-xs font-medium bg-surface-2 text-on-surface-secondary active:bg-surface-3"
+              className={`flex-1 py-1.5 text-xs font-medium ${
+                activeTool === 'note'
+                  ? 'text-stone-400 hover:bg-amber-100 active:bg-amber-200 border-l border-amber-200/60'
+                  : 'bg-surface-2 text-on-surface-secondary active:bg-surface-3'
+              }`}
             >
               ✕ Cancel
             </button>

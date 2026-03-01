@@ -1,8 +1,8 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useDocumentStore } from '@/stores/documentStore';
-import type { Point } from '@/types';
+import type { Point, ShapeSubType } from '@/types';
 
 interface DrawingCanvasProps {
   pageNumber: number;
@@ -17,28 +17,73 @@ interface TextEditorState {
   value: string;
 }
 
+// ─── Shape drawing helper ─────────────────────────────────────────────────────
+// Caller sets strokeStyle / lineWidth / globalAlpha before calling.
+function drawShapeOnCtx(
+  ctx: CanvasRenderingContext2D,
+  type: ShapeSubType,
+  sx: number, sy: number,
+  ex: number, ey: number,
+  zoom: number,
+) {
+  const sxz = sx * zoom, syz = sy * zoom, exz = ex * zoom, eyz = ey * zoom;
+  ctx.beginPath();
+  switch (type) {
+    case 'rectangle':
+      ctx.strokeRect(sxz, syz, exz - sxz, eyz - syz);
+      break;
+    case 'circle': {
+      const rx = (exz - sxz) / 2;
+      const ry = (eyz - syz) / 2;
+      ctx.ellipse(sxz + rx, syz + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'line':
+      ctx.moveTo(sxz, syz);
+      ctx.lineTo(exz, eyz);
+      ctx.stroke();
+      break;
+    case 'arrow': {
+      ctx.moveTo(sxz, syz);
+      ctx.lineTo(exz, eyz);
+      ctx.stroke();
+      const angle   = Math.atan2(eyz - syz, exz - sxz);
+      const headLen = 14 * zoom;
+      ctx.beginPath();
+      ctx.moveTo(exz, eyz);
+      ctx.lineTo(exz - headLen * Math.cos(angle - 0.4), eyz - headLen * Math.sin(angle - 0.4));
+      ctx.moveTo(exz, eyz);
+      ctx.lineTo(exz - headLen * Math.cos(angle + 0.4), eyz - headLen * Math.sin(angle + 0.4));
+      ctx.stroke();
+      break;
+    }
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [textEditor, setTextEditor] = useState<TextEditorState>({ active: false, x: 0, y: 0, value: '' });
-  const pointsRef = useRef<Point[]>([]);
+  const pointsRef   = useRef<Point[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const activeTool = useUIStore(s => s.activeTool);
-  const activeColor = useUIStore(s => s.activeColor);
-  const strokeWidth = useUIStore(s => s.strokeWidth);
-  const shapeSubType = useUIStore(s => s.shapeSubType);
+  const activeTool       = useUIStore(s => s.activeTool);
+  const activeColor      = useUIStore(s => s.activeColor);
+  const strokeWidth      = useUIStore(s => s.strokeWidth);
+  const shapeSubType     = useUIStore(s => s.shapeSubType);
   const pendingSignature = useUIStore(s => s.pendingSignature);
-  const setActiveTool = useUIStore(s => s.setActiveTool);
-  const pendingStamp = useUIStore(s => s.pendingStamp);
+  const setActiveTool    = useUIStore(s => s.setActiveTool);
+  const pendingStamp     = useUIStore(s => s.pendingStamp);
 
-  const addAnnotation = useAnnotationStore(s => s.addAnnotation);
-  const annotations = useAnnotationStore(s => s.annotations);
+  const addAnnotation    = useAnnotationStore(s => s.addAnnotation);
+  const annotations      = useAnnotationStore(s => s.annotations);
   const removeAnnotation = useAnnotationStore(s => s.removeAnnotation);
-  const tabs = useDocumentStore(s => s.tabs);
-  const activeTabId = useDocumentStore(s => s.activeTabId);
-
-  const activeTab = tabs.find(t => t.id === activeTabId);
+  const tabs             = useDocumentStore(s => s.tabs);
+  const activeTabId      = useDocumentStore(s => s.activeTabId);
+  const activeTab        = tabs.find(t => t.id === activeTabId);
 
   // Focus textarea when text editor opens
   useEffect(() => {
@@ -47,15 +92,16 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
     }
   }, [textEditor.active]);
 
-  // Redraw canvas whenever annotations change
-  useEffect(() => {
+  // ── Canvas redraw ─────────────────────────────────────────────────────────
+  // Extracted as useCallback so shape-preview can call it to clear + repaint
+  // all committed annotations before overlaying the in-progress ghost shape.
+  const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const parent = canvas.parentElement;
     if (!parent) return;
 
-    canvas.width = parent.offsetWidth;
+    canvas.width  = parent.offsetWidth;
     canvas.height = parent.offsetHeight;
 
     const ctx = canvas.getContext('2d')!;
@@ -63,136 +109,107 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
 
     const pageAnnotations = annotations.filter(a => a.page === pageNumber);
 
-    // ── Freehand ──────────────────────────────────────────────────────────────
+    // ── Freehand (bezier-smoothed) ───────────────────────────────────────────
     pageAnnotations.filter(a => a.type === 'freehand' && a.points).forEach(ann => {
-      if (!ann.points || ann.points.length < 2) return;
+      const pts = ann.points!;
+      if (pts.length < 2) return;
       ctx.beginPath();
       ctx.strokeStyle = ann.color;
-      ctx.lineWidth = (ann.shape?.strokeWidth || 2) * zoom;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.lineWidth   = (ann.shape?.strokeWidth || 2) * zoom;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
       ctx.globalAlpha = 0.85;
-      ctx.moveTo(ann.points[0].x * zoom, ann.points[0].y * zoom);
-      for (let i = 1; i < ann.points.length; i++) {
-        ctx.lineTo(ann.points[i].x * zoom, ann.points[i].y * zoom);
+      ctx.moveTo(pts[0].x * zoom, pts[0].y * zoom);
+      // Quadratic bezier through midpoints — produces a smooth curve through all samples
+      for (let i = 1; i < pts.length - 1; i++) {
+        const midX = (pts[i].x + pts[i + 1].x) / 2 * zoom;
+        const midY = (pts[i].y + pts[i + 1].y) / 2 * zoom;
+        ctx.quadraticCurveTo(pts[i].x * zoom, pts[i].y * zoom, midX, midY);
       }
+      ctx.lineTo(pts[pts.length - 1].x * zoom, pts[pts.length - 1].y * zoom);
       ctx.stroke();
     });
 
-    // ── Shapes ────────────────────────────────────────────────────────────────
+    // ── Shapes ───────────────────────────────────────────────────────────────
     pageAnnotations.filter(a => a.type === 'shape' && a.shape).forEach(ann => {
-      if (!ann.shape) return;
-      const { type, startX, startY, endX, endY, strokeWidth: sw } = ann.shape;
-      ctx.beginPath();
+      const { type, startX, startY, endX, endY, strokeWidth: sw } = ann.shape!;
       ctx.strokeStyle = ann.color;
-      ctx.lineWidth = sw * zoom;
+      ctx.lineWidth   = sw * zoom;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
       ctx.globalAlpha = 0.85;
-      const sx = startX * zoom, sy = startY * zoom;
-      const ex = endX * zoom, ey = endY * zoom;
-
-      switch (type) {
-        case 'rectangle':
-          ctx.strokeRect(sx, sy, ex - sx, ey - sy);
-          break;
-        case 'circle': {
-          const rx = (ex - sx) / 2, ry = (ey - sy) / 2;
-          ctx.ellipse(sx + rx, sy + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
-          ctx.stroke();
-          break;
-        }
-        case 'line':
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-          break;
-        case 'arrow': {
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-          const angle = Math.atan2(ey - sy, ex - sx);
-          const headLen = 14 * zoom;
-          ctx.beginPath();
-          ctx.moveTo(ex, ey);
-          ctx.lineTo(ex - headLen * Math.cos(angle - 0.4), ey - headLen * Math.sin(angle - 0.4));
-          ctx.moveTo(ex, ey);
-          ctx.lineTo(ex - headLen * Math.cos(angle + 0.4), ey - headLen * Math.sin(angle + 0.4));
-          ctx.stroke();
-          break;
-        }
-      }
+      drawShapeOnCtx(ctx, type, startX, startY, endX, endY, zoom);
     });
 
-    // ── Notes (sticky notes) ──────────────────────────────────────────────────
+    // ── Notes (sticky notes) ─────────────────────────────────────────────────
     pageAnnotations.filter(a => a.type === 'note' && a.position && a.content).forEach(ann => {
-      const x = ann.position!.x * zoom;
-      const y = ann.position!.y * zoom;
+      const x       = ann.position!.x * zoom;
+      const y       = ann.position!.y * zoom;
       const fontSize = 13 * zoom;
       ctx.font = `${fontSize}px sans-serif`;
       const lines = ann.content!.split('\n');
       const lineH = fontSize * 1.4;
-      const maxW = Math.max(...lines.map(l => ctx.measureText(l).width), 80 * zoom);
-      const pad = 6 * zoom;
+      const maxW  = Math.max(...lines.map(l => ctx.measureText(l).width), 80 * zoom);
+      const pad   = 6 * zoom;
       ctx.globalAlpha = 0.95;
-      ctx.fillStyle = '#fef08a';
+      ctx.fillStyle   = '#fef08a';
       ctx.fillRect(x - pad, y - fontSize, maxW + pad * 2, lineH * lines.length + pad * 2);
       ctx.strokeStyle = '#ca8a04';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth   = 1.5;
       ctx.strokeRect(x - pad, y - fontSize, maxW + pad * 2, lineH * lines.length + pad * 2);
-      ctx.fillStyle = '#422006';
+      ctx.fillStyle   = '#422006';
       ctx.globalAlpha = 1;
       lines.forEach((line, i) => ctx.fillText(line, x, y + lineH * i));
     });
 
-    // ── Text boxes ────────────────────────────────────────────────────────────
+    // ── Text boxes ───────────────────────────────────────────────────────────
     pageAnnotations.filter(a => a.type === 'text' && a.position && a.content).forEach(ann => {
-      const x = ann.position!.x * zoom;
-      const y = ann.position!.y * zoom;
+      const x        = ann.position!.x * zoom;
+      const y        = ann.position!.y * zoom;
       const fontSize = (ann.fontSize || 16) * zoom;
       ctx.font = `${fontSize}px ${ann.fontFamily || 'sans-serif'}`;
-      ctx.fillStyle = ann.color || '#1e293b';
-      ctx.globalAlpha = 1;
-      // Draw background
       const lines = ann.content!.split('\n');
       const lineH = fontSize * 1.4;
-      const maxW = Math.max(...lines.map(l => ctx.measureText(l).width));
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      const maxW  = Math.max(...lines.map(l => ctx.measureText(l).width));
+      ctx.globalAlpha = 1;
+      ctx.fillStyle   = 'rgba(255,255,255,0.85)';
       ctx.fillRect(x - 4, y - fontSize, maxW + 8, lineH * lines.length + 8);
       ctx.fillStyle = ann.color || '#1e293b';
-      lines.forEach((line, i) => {
-        ctx.fillText(line, x, y + lineH * i);
-      });
+      lines.forEach((line, i) => ctx.fillText(line, x, y + lineH * i));
     });
 
-    // ── Signature / Stamp images ───────────────────────────────────────────────
-    const imageAnnotations = pageAnnotations.filter(
-      a => (a.type === 'signature' || a.type === 'stamp') && a.imageData && a.position,
-    );
-    imageAnnotations.forEach(ann => {
-      const img = new Image();
-      img.onload = () => {
-        if (!canvasRef.current) return;
-        const c = canvasRef.current.getContext('2d')!;
-        const x = ann.position!.x * zoom;
-        const y = ann.position!.y * zoom;
-        const w = (ann.width || 200) * zoom;
-        const h = (ann.height || 60) * zoom;
-        c.globalAlpha = 0.95;
-        c.drawImage(img, x, y, w, h);
-        c.globalAlpha = 1;
-      };
-      img.src = ann.imageData!;
-    });
+    // ── Signature / Stamp images (async loads) ────────────────────────────────
+    pageAnnotations
+      .filter(a => (a.type === 'signature' || a.type === 'stamp') && a.imageData && a.position)
+      .forEach(ann => {
+        const img = new Image();
+        img.onload = () => {
+          if (!canvasRef.current) return;
+          const c = canvasRef.current.getContext('2d')!;
+          const x = ann.position!.x * zoom;
+          const y = ann.position!.y * zoom;
+          const w = (ann.width  || 200) * zoom;
+          const h = (ann.height ||  60) * zoom;
+          c.globalAlpha = 0.95;
+          c.drawImage(img, x, y, w, h);
+          c.globalAlpha = 1;
+        };
+        img.src = ann.imageData!;
+      });
 
     ctx.globalAlpha = 1;
   }, [annotations, pageNumber, zoom]);
 
+  // Redraw whenever annotations, page, or zoom change
+  useEffect(() => { redrawCanvas(); }, [redrawCanvas]);
+
   const getPoint = useCallback(
     (e: React.PointerEvent): Point => {
       const canvas = canvasRef.current!;
-      const rect = canvas.getBoundingClientRect();
+      const rect   = canvas.getBoundingClientRect();
       return {
         x: (e.clientX - rect.left) / zoom,
-        y: (e.clientY - rect.top) / zoom,
+        y: (e.clientY - rect.top)  / zoom,
       };
     },
     [zoom],
@@ -215,11 +232,11 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
               }
             }
           }
-          // Also allow erasing shapes, stamps, signatures
-          if ((ann.type === 'shape' || ann.type === 'text' || ann.type === 'signature' || ann.type === 'stamp') && ann.position) {
-            const dx = Math.abs(ann.position.x - point.x);
-            const dy = Math.abs(ann.position.y - point.y);
-            if (dx < 30 && dy < 30) {
+          if (
+            (ann.type === 'shape' || ann.type === 'text' || ann.type === 'signature' || ann.type === 'stamp') &&
+            ann.position
+          ) {
+            if (Math.abs(ann.position.x - point.x) < 30 && Math.abs(ann.position.y - point.y) < 30) {
               removeAnnotation(ann.id);
               return;
             }
@@ -228,10 +245,10 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         return;
       }
 
-      // ── Text / Note tool ─────────────────────────────────────────────────────
+      // ── Text / Note tool ──────────────────────────────────────────────────
       if (activeTool === 'text' || activeTool === 'note') {
         const canvas = canvasRef.current!;
-        const rect = canvas.getBoundingClientRect();
+        const rect   = canvas.getBoundingClientRect();
         setTextEditor({
           active: true,
           x: e.clientX - rect.left,
@@ -241,7 +258,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         return;
       }
 
-      // ── Signature placement ──────────────────────────────────────────────────
+      // ── Signature placement ───────────────────────────────────────────────
       if (activeTool === 'signature' && pendingSignature) {
         addAnnotation({
           documentId: activeTab.documentId,
@@ -253,11 +270,10 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
           width: 200,
           height: 70,
         });
-        // Stay in placement mode so multiple sigs can be placed
         return;
       }
 
-      // ── Stamp placement ──────────────────────────────────────────────────────
+      // ── Stamp placement ───────────────────────────────────────────────────
       if (activeTool === 'stamp' && pendingStamp) {
         addAnnotation({
           documentId: activeTab.documentId,
@@ -273,11 +289,9 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         return;
       }
 
-      // ── Freehand & Shapes ────────────────────────────────────────────────────
+      // ── Freehand & Shapes ─────────────────────────────────────────────────
       if (activeTool !== 'freehand' && activeTool !== 'shape') return;
 
-      // Capture pointer here (only for stroke tools) so pointermove/up fire
-      // even if the finger leaves the canvas mid-stroke
       (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
       setIsDrawing(true);
       pointsRef.current = [point];
@@ -287,9 +301,9 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         if (ctx) {
           ctx.beginPath();
           ctx.strokeStyle = activeColor;
-          ctx.lineWidth = strokeWidth * zoom;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
+          ctx.lineWidth   = strokeWidth * zoom;
+          ctx.lineCap     = 'round';
+          ctx.lineJoin    = 'round';
           ctx.globalAlpha = 0.85;
           ctx.moveTo(point.x * zoom, point.y * zoom);
         }
@@ -309,14 +323,44 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       pointsRef.current.push(point);
 
       if (activeTool === 'freehand') {
+        // ── Live smooth bezier ─────────────────────────────────────────────
+        // Each move draws one segment: from the previous midpoint to the new
+        // midpoint, using the previous sample as the quadratic control point.
+        // This produces perfectly smooth, lag-free curves.
         const ctx = canvasRef.current?.getContext('2d');
         if (ctx) {
-          ctx.lineTo(point.x * zoom, point.y * zoom);
-          ctx.stroke();
+          const pts = pointsRef.current;
+          if (pts.length >= 2) {
+            const prev = pts[pts.length - 2];
+            const midX = (prev.x + point.x) / 2 * zoom;
+            const midY = (prev.y + point.y) / 2 * zoom;
+            ctx.quadraticCurveTo(prev.x * zoom, prev.y * zoom, midX, midY);
+            ctx.stroke();
+            // Start the next segment from the midpoint for seamless curves
+            ctx.beginPath();
+            ctx.moveTo(midX, midY);
+          }
+        }
+      } else if (activeTool === 'shape' && pointsRef.current.length > 0) {
+        // ── Live shape preview (dashed ghost) ─────────────────────────────
+        // Clear + repaint committed annotations, then overlay the ghost shape.
+        redrawCanvas();
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) {
+          const start = pointsRef.current[0];
+          ctx.save();
+          ctx.strokeStyle = activeColor;
+          ctx.lineWidth   = strokeWidth * zoom;
+          ctx.lineCap     = 'round';
+          ctx.lineJoin    = 'round';
+          ctx.globalAlpha = 0.75;
+          ctx.setLineDash([6 * zoom, 4 * zoom]);
+          drawShapeOnCtx(ctx, shapeSubType, start.x, start.y, point.x, point.y, zoom);
+          ctx.restore();
         }
       }
     },
-    [isDrawing, activeTool, zoom, getPoint],
+    [isDrawing, activeTool, zoom, getPoint, redrawCanvas, activeColor, strokeWidth, shapeSubType],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -337,7 +381,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       });
     } else if (activeTool === 'shape') {
       const start = points[0];
-      const end = points[points.length - 1];
+      const end   = points[points.length - 1];
       addAnnotation({
         documentId: activeTab.documentId,
         page: pageNumber,
@@ -378,13 +422,9 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
     setTextEditor({ active: false, x: 0, y: 0, value: '' });
   }, [activeTab, textEditor, activeTool, activeColor, zoom, pageNumber, addAnnotation]);
 
-  // Determine if this canvas should capture events
   const isInteractive = activeTool === 'freehand' || activeTool === 'eraser'
     || activeTool === 'shape' || activeTool === 'text' || activeTool === 'note'
     || activeTool === 'signature' || activeTool === 'stamp';
-  // Drawing tools need touchAction:none to prevent scroll stealing mid-stroke.
-  // Tap-only tools (note/text/signature/stamp) allow pan so the user can scroll
-  // to position before tapping to place.
   const isStrokeTool = activeTool === 'freehand' || activeTool === 'eraser' || activeTool === 'shape';
 
   return (
@@ -394,8 +434,6 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         className="absolute inset-0 z-10"
         style={{
           pointerEvents: isInteractive ? 'auto' : 'none',
-          // Stroke tools need none to prevent scroll mid-draw.
-          // Tap-only tools use pan-x pan-y so the user can still scroll to position.
           touchAction: isStrokeTool ? 'none' : (isInteractive ? 'pan-x pan-y' : 'auto'),
         }}
         onPointerDown={handlePointerDown}
@@ -410,8 +448,6 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         <div
           className="absolute z-20"
           style={{ left: textEditor.x, top: textEditor.y }}
-          // Stop pointer events from reaching the canvas so tapping the editor
-          // doesn't re-trigger handlePointerDown
           onPointerDown={e => e.stopPropagation()}
         >
           <textarea
@@ -437,9 +473,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
             style={activeTool === 'note' ? undefined : { color: activeColor }}
             rows={3}
           />
-          {/* Explicit confirm / cancel buttons — onBlur is intentionally omitted
-              because on mobile the tap that opened the editor fires a click that
-              would blur the textarea before the user types anything */}
+          {/* Explicit confirm / cancel buttons */}
           <div className={`flex rounded-b border-x border-b overflow-hidden ${
             activeTool === 'note' ? 'border-yellow-400' : 'border-brand-500'
           }`}>

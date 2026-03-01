@@ -84,6 +84,9 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   }, [pdf, pageNumber, zoom]);
 
   // ── Render text-based annotation overlays ─────────────────────────────────
+  // Rects are stored normalised (÷zoom at creation time) so they must be
+  // scaled back (×zoom) here.  Adding zoom to deps ensures overlays reposition
+  // whenever the user zooms in or out.
   useEffect(() => {
     const layer = annotLayerRef.current;
     if (!layer) return;
@@ -97,10 +100,10 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
       ann.rects!.forEach(rect => {
         const el = document.createElement('div');
         el.style.position = 'absolute';
-        el.style.left = `${rect.x}px`;
-        el.style.top = `${rect.y}px`;
-        el.style.width = `${rect.width}px`;
-        el.style.height = `${rect.height}px`;
+        el.style.left = `${rect.x * zoom}px`;
+        el.style.top = `${rect.y * zoom}px`;
+        el.style.width = `${rect.width * zoom}px`;
+        el.style.height = `${rect.height * zoom}px`;
         el.style.pointerEvents = 'none';
         el.title = ann.selectedText || ann.content || '';
 
@@ -110,15 +113,15 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         } else if (ann.type === 'underline') {
           el.style.borderBottom = `2px solid ${ann.color}`;
         } else if (ann.type === 'strikethrough') {
-          // Center a horizontal line through the rect
-          el.style.top = `${rect.y + rect.height / 2 - 1}px`;
+          // Centre a 2 px line through the rect (override top after scaling)
+          el.style.top = `${(rect.y + rect.height / 2) * zoom - 1}px`;
           el.style.height = '2px';
           el.style.backgroundColor = ann.color;
         } else if (ann.type === 'squiggly') {
           const encodedColor = encodeURIComponent(ann.color);
           el.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 4 Q2 0 4 4 Q6 8 8 4' fill='none' stroke='${encodedColor}' stroke-width='1.5'/%3E%3C/svg%3E")`;
           el.style.backgroundRepeat = 'repeat-x';
-          el.style.backgroundPosition = `0 ${rect.height - 4}px`;
+          el.style.backgroundPosition = `0 ${rect.height * zoom - 4}px`;
           el.style.backgroundSize = '8px 4px';
         } else if (ann.type === 'note') {
           el.style.backgroundColor = ann.color + '33';
@@ -128,7 +131,7 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         layer.appendChild(el);
       });
     });
-  }, [annotations, pageNumber]);
+  }, [annotations, pageNumber, zoom]); // zoom added — overlays rescale on every zoom change
 
   // ── Text selection → annotation creation ──────────────────────────────────
   const handleTextSelection = useCallback(() => {
@@ -153,11 +156,13 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
 
     Array.from(range.getClientRects()).forEach(r => {
       if (r.width > 0 && r.height > 0) {
+        // Normalise to PDF units (÷zoom) so the overlay layer can re-scale
+        // correctly at any future zoom level by multiplying back by zoom.
         rects.push(new DOMRect(
-          r.left - layerRect.left,
-          r.top - layerRect.top,
-          r.width,
-          r.height,
+          (r.left - layerRect.left) / zoom,
+          (r.top  - layerRect.top)  / zoom,
+          r.width  / zoom,
+          r.height / zoom,
         ));
       }
     });

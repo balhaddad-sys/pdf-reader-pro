@@ -219,57 +219,106 @@ export function PDFViewer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, updateTab]);
 
-  // Mouse wheel zoom (also handles Chrome Android pinch-to-zoom which fires as ctrlKey+wheel)
+  // Mouse wheel zoom with focal-point scroll (Ctrl+wheel also handles Chrome Android pinch).
+  // Uses activeTabRef so the listener is only attached once — no churn on every zoom change.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const handleWheel = (e: WheelEvent) => {
-      if (!activeTab || !(e.ctrlKey || e.metaKey)) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      updateTab(activeTab.id, { zoom: clamp(Math.round((activeTab.zoom + delta) * 100) / 100, 0.25, 4) });
+      const tab = activeTabRef.current;
+      if (!tab) return;
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const oldZoom = tab.zoom;
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const newZoom = clamp(Math.round((oldZoom + delta) * 100) / 100, 0.25, 4);
+      if (newZoom === oldZoom) return;
+      // Content-space position of the cursor (PDF units, independent of zoom)
+      const contentX = (mouseX + container.scrollLeft) / oldZoom;
+      const contentY = (mouseY + container.scrollTop) / oldZoom;
+      updateTab(tab.id, { zoom: newZoom });
+      // After React re-renders at the new zoom, scroll so the focal point stays put
+      requestAnimationFrame(() => {
+        container.scrollLeft = Math.max(0, contentX * newZoom - mouseX);
+        container.scrollTop  = Math.max(0, contentY * newZoom - mouseY);
+      });
     };
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [activeTab, updateTab]);
+  }, [updateTab]); // activeTab read via activeTabRef — no re-subscription on each zoom change
 
-  // Pinch-to-zoom via touch distance (works on all browsers).
-  // Native browser zoom is blocked via viewport maximum-scale=1.0, so we
-  // don't need preventDefault here — passive listeners give better scroll perf.
+  // Pinch-to-zoom: locks in the content-space position of the pinch centre at
+  // touchStart so every subsequent move applies an *absolute* scale — avoids the
+  // stale-zoom bug even when React state updates lag behind.
+  // touchmove is intentionally non-passive so e.preventDefault() can stop the
+  // browser's own pinch-zoom / scroll during a two-finger gesture.
   useEffect(() => {
     const container = scrollRoot;
     if (!container) return;
 
-    let pinchDist = 0;
-    let pinchZoom = 1;
+    let pinchActive  = false;
+    let pinchDist    = 0;
+    let pinchZoom    = 1;
+    let pinchContentX = 0; // content-space coords of the pinch midpoint
+    let pinchContentY = 0;
+    let pinchScreenX  = 0; // screen coords of the pinch midpoint
+    let pinchScreenY  = 0;
 
     const getDist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        pinchDist = getDist(e.touches);
-        pinchZoom = activeTabRef.current?.zoom ?? 1;
+        pinchActive = true;
+        pinchDist   = getDist(e.touches);
+        pinchZoom   = activeTabRef.current?.zoom ?? 1;
+        const containerEl = container as HTMLDivElement;
+        const r = containerEl.getBoundingClientRect();
+        pinchScreenX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        pinchScreenY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        // Lock the content-space position of the pinch centre so all subsequent
+        // move events reference the same anchor — no cumulative drift.
+        pinchContentX = (pinchScreenX - r.left + containerEl.scrollLeft) / pinchZoom;
+        pinchContentY = (pinchScreenY - r.top  + containerEl.scrollTop)  / pinchZoom;
+      } else {
+        pinchActive = false;
+        pinchDist   = 0;
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || pinchDist === 0) return;
-      const scale = getDist(e.touches) / pinchDist;
+      if (!pinchActive || e.touches.length !== 2 || pinchDist === 0) return;
+      e.preventDefault(); // Block native scroll / browser zoom during the gesture
+      const scale   = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
-      const tab = activeTabRef.current;
-      if (tab) updateTab(tab.id, { zoom: newZoom });
+      const tab     = activeTabRef.current;
+      if (!tab) return;
+      const containerEl = container as HTMLDivElement;
+      const r = containerEl.getBoundingClientRect();
+      // Scroll so the locked content point stays under the pinch centre
+      const targetLeft = pinchContentX * newZoom - (pinchScreenX - r.left);
+      const targetTop  = pinchContentY * newZoom - (pinchScreenY - r.top);
+      updateTab(tab.id, { zoom: newZoom });
+      requestAnimationFrame(() => {
+        containerEl.scrollLeft = Math.max(0, targetLeft);
+        containerEl.scrollTop  = Math.max(0, targetTop);
+      });
     };
 
-    const onTouchEnd = () => { pinchDist = 0; };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) { pinchActive = false; pinchDist = 0; }
+    };
 
     container.addEventListener('touchstart', onTouchStart, { passive: true });
-    container.addEventListener('touchmove', onTouchMove, { passive: true });
-    container.addEventListener('touchend', onTouchEnd, { passive: true });
+    container.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    container.addEventListener('touchend',   onTouchEnd,   { passive: true });
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove', onTouchMove);
-      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchmove',  onTouchMove);
+      container.removeEventListener('touchend',   onTouchEnd);
     };
   }, [scrollRoot, updateTab]);
 

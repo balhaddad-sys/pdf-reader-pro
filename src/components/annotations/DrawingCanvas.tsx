@@ -12,8 +12,10 @@ interface DrawingCanvasProps {
 // Inline text editor that appears when user clicks with the text tool
 interface TextEditorState {
   active: boolean;
-  x: number;
+  x: number;        // canvas-relative px (used for annotation position)
   y: number;
+  screenX: number;  // viewport-relative px (used for fixed overlay positioning)
+  screenY: number;
   value: string;
 }
 
@@ -99,19 +101,22 @@ function drawShapeOnCtx(
 export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [textEditor, setTextEditor] = useState<TextEditorState>({ active: false, x: 0, y: 0, value: '' });
+  const [textEditor, setTextEditor] = useState<TextEditorState>({ active: false, x: 0, y: 0, screenX: 0, screenY: 0, value: '' });
   const pointsRef   = useRef<Point[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Detect mobile so we can render a bottom-sheet instead of the inline overlay
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
-  );
+  // Track the visual viewport (shrinks when the soft keyboard opens on mobile)
+  const [viewport, setViewport] = useState(() => ({
+    w: window.visualViewport?.width  ?? window.innerWidth,
+    h: window.visualViewport?.height ?? window.innerHeight,
+  }));
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setViewport({ w: vv.width, h: vv.height });
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
 
   const activeTool       = useUIStore(s => s.activeTool);
@@ -347,6 +352,8 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
           active: true,
           x: e.clientX - rect.left,
           y: e.clientY - rect.top,
+          screenX: e.clientX,
+          screenY: e.clientY,
           value: '',
         });
         return;
@@ -513,13 +520,28 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
       fontSize: 16,
       fontFamily: 'sans-serif',
     });
-    setTextEditor({ active: false, x: 0, y: 0, value: '' });
+    setTextEditor({ active: false, x: 0, y: 0, screenX: 0, screenY: 0, value: '' });
   }, [activeTab, textEditor, activeTool, activeColor, zoom, pageNumber, addAnnotation]);
 
   const isInteractive = activeTool === 'freehand' || activeTool === 'eraser'
     || activeTool === 'shape' || activeTool === 'text' || activeTool === 'note'
     || activeTool === 'signature' || activeTool === 'stamp';
   const isStrokeTool = activeTool === 'freehand' || activeTool === 'eraser' || activeTool === 'shape';
+
+  // ── Smart overlay position ───────────────────────────────────────────────
+  // Computed here (not inside JSX) so TypeScript can infer the types correctly.
+  // The overlay is `position:fixed`, so `left/top` are visual-viewport coords.
+  // When the soft keyboard opens on mobile, `viewport.h` shrinks automatically
+  // via the visualViewport 'resize' event, causing the overlay to float up.
+  const OVERLAY_W = 248;
+  const OVERLAY_H = activeTool === 'note' ? 192 : 172;
+  const MARGIN    = 12;
+  const overlayLeft = Math.max(MARGIN, Math.min(textEditor.screenX, viewport.w - OVERLAY_W - MARGIN));
+  const overlayTop  = Math.max(MARGIN, Math.min(textEditor.screenY, viewport.h - OVERLAY_H - MARGIN));
+  const dismissEditor = () => {
+    setTextEditor({ active: false, x: 0, y: 0, screenX: 0, screenY: 0, value: '' });
+    setActiveTool(null);
+  };
 
   return (
     <>
@@ -537,117 +559,24 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         onPointerCancel={handlePointerUp}
       />
 
-      {/* ── Mobile bottom-sheet editor ──────────────────────────────────────
-           On small screens the inline overlay lands under the keyboard or
-           clips off the edge.  We render a fixed bottom-sheet instead so
-           the editor is always fully visible and keyboard-friendly.        */}
-      {textEditor.active && isMobile && (
-        <>
-          {/* Scrim — tap to cancel */}
-          <div
-            className="fixed inset-0 z-40 bg-black/25"
-            onPointerDown={e => {
-              e.preventDefault();
-              setTextEditor({ active: false, x: 0, y: 0, value: '' });
-              setActiveTool(null);
-            }}
-          />
-
-          <div className={`fixed inset-x-0 bottom-0 z-50 overflow-hidden ${
-            activeTool === 'note'
-              ? 'rounded-t-2xl shadow-2xl border-t border-amber-200/60'
-              : 'rounded-t-2xl shadow-2xl border-t border-brand-500/30'
-          }`}
-            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-            onPointerDown={e => e.stopPropagation()}
-          >
-            {/* Drag handle */}
-            <div className={`flex justify-center py-2 ${activeTool === 'note' ? 'bg-[#FFFBF0]' : 'bg-surface-1'}`}>
-              <div className="w-9 h-1 rounded-full bg-black/15" />
-            </div>
-
-            {/* Header */}
-            {activeTool === 'note' ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-[#FFFBF0] border-b border-amber-200/60 border-l-[3.5px] border-l-amber-400">
-                <span className="text-[9px] font-bold tracking-[0.18em] text-amber-700 uppercase">Note</span>
-              </div>
-            ) : (
-              <div className="flex items-center px-4 py-2 bg-surface-1 border-b border-border">
-                <span className="text-xs font-semibold text-on-surface-secondary uppercase tracking-widest">Text</span>
-              </div>
-            )}
-
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={textEditor.value}
-              onChange={e => setTextEditor(s => ({ ...s, value: e.target.value }))}
-              onKeyDown={e => {
-                if (e.key === 'Escape') {
-                  setTextEditor({ active: false, x: 0, y: 0, value: '' });
-                  setActiveTool(null);
-                }
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleTextConfirm();
-                }
-              }}
-              placeholder={activeTool === 'note' ? 'Write your note…' : 'Type text…'}
-              className={`w-full resize-none focus:outline-none block ${
-                activeTool === 'note'
-                  ? 'px-4 py-3 text-[14px] leading-relaxed bg-[#FFFBF0] text-stone-800 placeholder:text-amber-700/35 border-l-[3.5px] border-l-amber-400 border-0'
-                  : 'px-4 py-3 text-sm bg-surface-1 text-on-surface border-0'
-              }`}
-              style={activeTool === 'note' ? undefined : { color: activeColor }}
-              rows={4}
-              autoFocus
-            />
-
-            {/* Action buttons */}
-            <div className={`flex gap-3 px-4 py-3 ${
-              activeTool === 'note'
-                ? 'bg-[#FFFBF0] border-t border-amber-200/60 border-l-[3.5px] border-l-amber-400'
-                : 'bg-surface-1 border-t border-border'
-            }`}>
-              <button
-                onPointerDown={e => {
-                  e.preventDefault(); e.stopPropagation();
-                  setTextEditor({ active: false, x: 0, y: 0, value: '' });
-                  setActiveTool(null);
-                }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-black/6 text-on-surface-secondary active:bg-black/10"
-              >
-                Cancel
-              </button>
-              <button
-                onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
-                  activeTool === 'note'
-                    ? 'bg-amber-400 text-white active:bg-amber-500'
-                    : 'bg-brand-500 text-white active:bg-brand-600'
-                }`}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Desktop inline overlay ───────────────────────────────────────────
-           Positioned exactly where the user tapped, fully visible on wide
-           screens where the keyboard doesn't obstruct the content.         */}
-      {textEditor.active && !isMobile && (
+      {/* ── Smart viewport-aware editor overlay ─────────────────────────────
+           Rendered as position:fixed — always visible regardless of scroll.
+           • Appears near the tap point (contextual, not a disconnected panel)
+           • Clamped so it never overflows the visible area
+           • On mobile, floats above the soft keyboard: visualViewport fires
+             a 'resize' event when the keyboard opens, `viewport.h` shrinks,
+             and the overlay's `top` is recalculated to stay in view         */}
+      {textEditor.active && (
         <div
-          className={`absolute z-20 overflow-hidden ${
+          style={{ position: 'fixed', left: overlayLeft, top: overlayTop, width: OVERLAY_W, zIndex: 50 }}
+          className={`overflow-hidden shadow-2xl ${
             activeTool === 'note'
-              ? 'rounded-lg shadow-2xl border border-amber-200/80'
-              : 'rounded-t shadow-lg'
+              ? 'rounded-xl border border-amber-200/80'
+              : 'rounded-xl border border-brand-500/30'
           }`}
-          style={{ left: textEditor.x, top: textEditor.y }}
-          onPointerDown={e => e.stopPropagation()}
+          onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
         >
-          {/* Note card header */}
+          {/* Note header strip */}
           {activeTool === 'note' && (
             <div className="flex items-center gap-1.5 px-3 py-[7px] bg-[#FFFBF0] border-b border-amber-200/60 border-l-[3.5px] border-l-amber-400">
               <span className="text-[9px] font-bold tracking-[0.18em] text-amber-700 uppercase">Note</span>
@@ -657,36 +586,31 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
           <textarea
             ref={textareaRef}
             value={textEditor.value}
-            onChange={e => setTextEditor(s => ({ ...s, value: e.target.value }))}
-            onKeyDown={e => {
-              if (e.key === 'Escape') {
-                setTextEditor({ active: false, x: 0, y: 0, value: '' });
-                setActiveTool(null);
-              }
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleTextConfirm();
-              }
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTextEditor((s: TextEditorState) => ({ ...s, value: e.target.value }))}
+            onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+              if (e.key === 'Escape') { dismissEditor(); }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextConfirm(); }
             }}
-            placeholder={activeTool === 'note' ? 'Write your note…' : 'Type text...'}
-            className={`min-w-[200px] min-h-[80px] resize-none focus:outline-none block w-full ${
+            placeholder={activeTool === 'note' ? 'Write your note…' : 'Type text…'}
+            className={`w-full resize-none focus:outline-none block ${
               activeTool === 'note'
                 ? 'px-3 py-2.5 text-[13px] leading-relaxed bg-[#FFFBF0] text-stone-800 placeholder:text-amber-700/35 border-l-[3.5px] border-l-amber-400 border-0'
-                : 'px-2 py-1.5 text-sm rounded-t border border-brand-500 bg-white/95 text-gray-900 shadow-lg'
+                : 'px-3 py-2.5 text-sm bg-white text-gray-900'
             }`}
             style={activeTool === 'note' ? undefined : { color: activeColor }}
             rows={3}
+            autoFocus
           />
 
-          {/* Action buttons */}
+          {/* Action row */}
           <div className={`flex overflow-hidden ${
             activeTool === 'note'
               ? 'border-t border-amber-200/60 border-l-[3.5px] border-l-amber-400 bg-[#FFFBF0]'
-              : 'rounded-b border-x border-b border-brand-500'
+              : 'border-t border-gray-200 bg-white'
           }`}>
             <button
-              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
-              className={`flex-1 py-1.5 text-xs font-semibold ${
+              onPointerDown={(e: React.PointerEvent) => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
+              className={`flex-1 py-2 text-xs font-semibold ${
                 activeTool === 'note'
                   ? 'text-amber-800 hover:bg-amber-100 active:bg-amber-200'
                   : 'bg-brand-500 text-white active:bg-brand-600'
@@ -695,15 +619,11 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
               ✓ Done
             </button>
             <button
-              onPointerDown={e => {
-                e.preventDefault(); e.stopPropagation();
-                setTextEditor({ active: false, x: 0, y: 0, value: '' });
-                setActiveTool(null);
-              }}
-              className={`flex-1 py-1.5 text-xs font-medium ${
+              onPointerDown={(e: React.PointerEvent) => { e.preventDefault(); e.stopPropagation(); dismissEditor(); }}
+              className={`flex-1 py-2 text-xs font-medium border-l ${
                 activeTool === 'note'
-                  ? 'text-stone-400 hover:bg-amber-100 active:bg-amber-200 border-l border-amber-200/60'
-                  : 'bg-surface-2 text-on-surface-secondary active:bg-surface-3'
+                  ? 'text-stone-400 hover:bg-amber-100 active:bg-amber-200 border-amber-200/60'
+                  : 'text-gray-500 bg-white border-gray-200 active:bg-gray-50'
               }`}
             >
               ✕ Cancel

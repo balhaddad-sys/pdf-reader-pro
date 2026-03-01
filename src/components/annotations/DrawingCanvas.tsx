@@ -103,6 +103,17 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
   const pointsRef   = useRef<Point[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Detect mobile so we can render a bottom-sheet instead of the inline overlay
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const activeTool       = useUIStore(s => s.activeTool);
   const activeColor      = useUIStore(s => s.activeColor);
   const strokeWidth      = useUIStore(s => s.strokeWidth);
@@ -526,8 +537,107 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         onPointerCancel={handlePointerUp}
       />
 
-      {/* Inline text editor overlay */}
-      {textEditor.active && (
+      {/* ── Mobile bottom-sheet editor ──────────────────────────────────────
+           On small screens the inline overlay lands under the keyboard or
+           clips off the edge.  We render a fixed bottom-sheet instead so
+           the editor is always fully visible and keyboard-friendly.        */}
+      {textEditor.active && isMobile && (
+        <>
+          {/* Scrim — tap to cancel */}
+          <div
+            className="fixed inset-0 z-40 bg-black/25"
+            onPointerDown={e => {
+              e.preventDefault();
+              setTextEditor({ active: false, x: 0, y: 0, value: '' });
+              setActiveTool(null);
+            }}
+          />
+
+          <div className={`fixed inset-x-0 bottom-0 z-50 overflow-hidden ${
+            activeTool === 'note'
+              ? 'rounded-t-2xl shadow-2xl border-t border-amber-200/60'
+              : 'rounded-t-2xl shadow-2xl border-t border-brand-500/30'
+          }`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            onPointerDown={e => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div className={`flex justify-center py-2 ${activeTool === 'note' ? 'bg-[#FFFBF0]' : 'bg-surface-1'}`}>
+              <div className="w-9 h-1 rounded-full bg-black/15" />
+            </div>
+
+            {/* Header */}
+            {activeTool === 'note' ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-[#FFFBF0] border-b border-amber-200/60 border-l-[3.5px] border-l-amber-400">
+                <span className="text-[9px] font-bold tracking-[0.18em] text-amber-700 uppercase">Note</span>
+              </div>
+            ) : (
+              <div className="flex items-center px-4 py-2 bg-surface-1 border-b border-border">
+                <span className="text-xs font-semibold text-on-surface-secondary uppercase tracking-widest">Text</span>
+              </div>
+            )}
+
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={textEditor.value}
+              onChange={e => setTextEditor(s => ({ ...s, value: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  setTextEditor({ active: false, x: 0, y: 0, value: '' });
+                  setActiveTool(null);
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleTextConfirm();
+                }
+              }}
+              placeholder={activeTool === 'note' ? 'Write your note…' : 'Type text…'}
+              className={`w-full resize-none focus:outline-none block ${
+                activeTool === 'note'
+                  ? 'px-4 py-3 text-[14px] leading-relaxed bg-[#FFFBF0] text-stone-800 placeholder:text-amber-700/35 border-l-[3.5px] border-l-amber-400 border-0'
+                  : 'px-4 py-3 text-sm bg-surface-1 text-on-surface border-0'
+              }`}
+              style={activeTool === 'note' ? undefined : { color: activeColor }}
+              rows={4}
+              autoFocus
+            />
+
+            {/* Action buttons */}
+            <div className={`flex gap-3 px-4 py-3 ${
+              activeTool === 'note'
+                ? 'bg-[#FFFBF0] border-t border-amber-200/60 border-l-[3.5px] border-l-amber-400'
+                : 'bg-surface-1 border-t border-border'
+            }`}>
+              <button
+                onPointerDown={e => {
+                  e.preventDefault(); e.stopPropagation();
+                  setTextEditor({ active: false, x: 0, y: 0, value: '' });
+                  setActiveTool(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-black/6 text-on-surface-secondary active:bg-black/10"
+              >
+                Cancel
+              </button>
+              <button
+                onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                  activeTool === 'note'
+                    ? 'bg-amber-400 text-white active:bg-amber-500'
+                    : 'bg-brand-500 text-white active:bg-brand-600'
+                }`}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Desktop inline overlay ───────────────────────────────────────────
+           Positioned exactly where the user tapped, fully visible on wide
+           screens where the keyboard doesn't obstruct the content.         */}
+      {textEditor.active && !isMobile && (
         <div
           className={`absolute z-20 overflow-hidden ${
             activeTool === 'note'
@@ -537,7 +647,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
           style={{ left: textEditor.x, top: textEditor.y }}
           onPointerDown={e => e.stopPropagation()}
         >
-          {/* Note card header — matches the rendered card */}
+          {/* Note card header */}
           {activeTool === 'note' && (
             <div className="flex items-center gap-1.5 px-3 py-[7px] bg-[#FFFBF0] border-b border-amber-200/60 border-l-[3.5px] border-l-amber-400">
               <span className="text-[9px] font-bold tracking-[0.18em] text-amber-700 uppercase">Note</span>

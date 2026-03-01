@@ -410,12 +410,14 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         <div
           className="absolute z-20"
           style={{ left: textEditor.x, top: textEditor.y }}
+          // Stop pointer events from reaching the canvas so tapping the editor
+          // doesn't re-trigger handlePointerDown
+          onPointerDown={e => e.stopPropagation()}
         >
           <textarea
             ref={textareaRef}
             value={textEditor.value}
             onChange={e => setTextEditor(s => ({ ...s, value: e.target.value }))}
-            onBlur={handleTextConfirm}
             onKeyDown={e => {
               if (e.key === 'Escape') {
                 setTextEditor({ active: false, x: 0, y: 0, value: '' });
@@ -427,7 +429,7 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
               }
             }}
             placeholder={activeTool === 'note' ? 'Write note...' : 'Type text...'}
-            className={`min-w-[140px] min-h-[60px] px-2 py-1 text-sm rounded border shadow-lg resize focus:outline-none ${
+            className={`min-w-[160px] min-h-[72px] px-2 py-1.5 text-sm rounded-t border shadow-lg resize-none focus:outline-none block w-full ${
               activeTool === 'note'
                 ? 'bg-yellow-100 border-yellow-400 text-yellow-900'
                 : 'bg-white/95 border-brand-500 text-gray-900'
@@ -435,7 +437,29 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
             style={activeTool === 'note' ? undefined : { color: activeColor }}
             rows={3}
           />
-          <div className="text-2xs text-white/70 mt-1">Enter to confirm · Esc to cancel</div>
+          {/* Explicit confirm / cancel buttons — onBlur is intentionally omitted
+              because on mobile the tap that opened the editor fires a click that
+              would blur the textarea before the user types anything */}
+          <div className={`flex rounded-b border-x border-b overflow-hidden ${
+            activeTool === 'note' ? 'border-yellow-400' : 'border-brand-500'
+          }`}>
+            <button
+              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextConfirm(); }}
+              className="flex-1 py-1.5 text-xs font-medium bg-brand-500 text-white active:bg-brand-600"
+            >
+              ✓ Done
+            </button>
+            <button
+              onPointerDown={e => {
+                e.preventDefault(); e.stopPropagation();
+                setTextEditor({ active: false, x: 0, y: 0, value: '' });
+                setActiveTool(null);
+              }}
+              className="flex-1 py-1.5 text-xs font-medium bg-surface-2 text-on-surface-secondary active:bg-surface-3"
+            >
+              ✕ Cancel
+            </button>
+          </div>
         </div>
       )}
     </>

@@ -1,0 +1,86 @@
+name: Build Android App
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Build Android AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout & toolchain ───────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Cache Gradle files for faster subsequent builds
+      - uses: gradle/actions/setup-gradle@v4
+
+      # ── Web build ──────────────────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets (Capacitor mode)
+        run: npm run build:android
+
+      # ── Android project setup ──────────────────────────────────────────────
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Patch AndroidManifest.xml
+        run: python3 scripts/patch-manifest.py
+
+      - name: Sync web assets into Android project
+        run: npx cap sync android
+
+      - name: Make Gradlew executable
+        run: chmod +x android/gradlew
+
+      # ── Signing setup (only when secrets are configured) ──────────────────
+      - name: Decode keystore
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      # ── Release build (signed AAB for Play Store) ─────────────────────────
+      - name: Build Release AAB
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        working-directory: android
+        run: |
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
+
+      - name: Upload Release AAB
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-reader-pro-release-${{ github.run_number }}.aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
+
+      # ── Debug build (unsigned APK — always runs, good for testing) ─────────
+      - name: Build Debug APK
+        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload Debug APK
+        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-reader-pro-debug-${{ github.run_number }}.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

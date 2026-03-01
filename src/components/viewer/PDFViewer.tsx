@@ -91,6 +91,7 @@ const INITIAL_PAGES = 5;
 
 export function PDFViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const pagesContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a state copy of the container so VirtualPage gets it after mount
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
 
@@ -250,21 +251,23 @@ export function PDFViewer() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [updateTab]); // activeTab read via activeTabRef — no re-subscription on each zoom change
 
-  // Pinch-to-zoom: locks in the content-space position of the pinch centre at
-  // touchStart so every subsequent move applies an *absolute* scale — avoids the
-  // stale-zoom bug even when React state updates lag behind.
-  // touchmove is intentionally non-passive so e.preventDefault() can stop the
-  // browser's own pinch-zoom / scroll during a two-finger gesture.
+  // Pinch-to-zoom: CSS transform preview during gesture → single commit on release.
+  // Applying transform: scale() to the pages container is GPU-composited, so it
+  // renders at native 60fps with zero React re-renders.  Only on touchend do we
+  // commit the final zoom to the store (one re-render total instead of one per frame).
+  // touchmove is intentionally non-passive so e.preventDefault() stops the browser's
+  // own pinch-zoom / page scroll during a two-finger gesture.
   useEffect(() => {
     const container = scrollRoot;
     if (!container) return;
 
-    let pinchActive  = false;
-    let pinchDist    = 0;
-    let pinchZoom    = 1;
-    let pinchContentX = 0; // content-space coords of the pinch midpoint
+    let pinchActive   = false;
+    let pinchDist     = 0;
+    let pinchZoom     = 1;
+    let currentScale  = 1;
+    let pinchContentX = 0;
     let pinchContentY = 0;
-    let pinchScreenX  = 0; // screen coords of the pinch midpoint
+    let pinchScreenX  = 0;
     let pinchScreenY  = 0;
 
     const getDist = (t: TouchList) =>
@@ -272,15 +275,15 @@ export function PDFViewer() {
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        pinchActive = true;
-        pinchDist   = getDist(e.touches);
-        pinchZoom   = activeTabRef.current?.zoom ?? 1;
+        pinchActive  = true;
+        pinchDist    = getDist(e.touches);
+        pinchZoom    = activeTabRef.current?.zoom ?? 1;
+        currentScale = 1;
         const containerEl = container as HTMLDivElement;
         const r = containerEl.getBoundingClientRect();
         pinchScreenX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         pinchScreenY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        // Lock the content-space position of the pinch centre so all subsequent
-        // move events reference the same anchor — no cumulative drift.
+        // Lock the content-space anchor so all move events reference the same point
         pinchContentX = (pinchScreenX - r.left + containerEl.scrollLeft) / pinchZoom;
         pinchContentY = (pinchScreenY - r.top  + containerEl.scrollTop)  / pinchZoom;
       } else {
@@ -291,34 +294,67 @@ export function PDFViewer() {
 
     const onTouchMove = (e: TouchEvent) => {
       if (!pinchActive || e.touches.length !== 2 || pinchDist === 0) return;
-      e.preventDefault(); // Block native scroll / browser zoom during the gesture
-      const scale   = getDist(e.touches) / pinchDist;
-      const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
-      const tab     = activeTabRef.current;
-      if (!tab) return;
+      e.preventDefault();
+
+      currentScale = getDist(e.touches) / pinchDist;
+      const pagesEl = pagesContainerRef.current;
+      if (!pagesEl) return;
+
       const containerEl = container as HTMLDivElement;
       const r = containerEl.getBoundingClientRect();
-      // Scroll so the locked content point stays under the pinch centre
-      const targetLeft = pinchContentX * newZoom - (pinchScreenX - r.left);
-      const targetTop  = pinchContentY * newZoom - (pinchScreenY - r.top);
-      updateTab(tab.id, { zoom: newZoom });
+      // Origin = pinch centre in the pages container's local coordinate space
+      const originX = containerEl.scrollLeft + (pinchScreenX - r.left);
+      const originY = containerEl.scrollTop  + (pinchScreenY - r.top);
+
+      // Visual-only CSS transform — no React state update, GPU-composited
+      pagesEl.style.transformOrigin = `${originX}px ${originY}px`;
+      pagesEl.style.transform       = `scale(${currentScale})`;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!pinchActive || e.touches.length >= 2) return;
+      pinchActive = false;
+      pinchDist   = 0;
+
+      const pagesEl     = pagesContainerRef.current;
+      const tab         = activeTabRef.current;
+      const containerEl = container as HTMLDivElement;
+      const r           = containerEl.getBoundingClientRect();
+
+      // Reset visual transform immediately
+      if (pagesEl) { pagesEl.style.transform = ''; pagesEl.style.transformOrigin = ''; }
+      if (!tab) return;
+
+      const finalZoom  = clamp(Math.round(pinchZoom * currentScale * 100) / 100, 0.25, 4);
+      const targetLeft = pinchContentX * finalZoom - (pinchScreenX - r.left);
+      const targetTop  = pinchContentY * finalZoom - (pinchScreenY - r.top);
+
+      // Single React state update — one re-render total instead of one per frame
+      updateTab(tab.id, { zoom: finalZoom });
+
+      // After React commits the new zoom, scroll to keep the pinch centre fixed
       requestAnimationFrame(() => {
         containerEl.scrollLeft = Math.max(0, targetLeft);
         containerEl.scrollTop  = Math.max(0, targetTop);
       });
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) { pinchActive = false; pinchDist = 0; }
+    const onTouchCancel = () => {
+      pinchActive = false;
+      pinchDist   = 0;
+      const pagesEl = pagesContainerRef.current;
+      if (pagesEl) { pagesEl.style.transform = ''; pagesEl.style.transformOrigin = ''; }
     };
 
-    container.addEventListener('touchstart', onTouchStart, { passive: true });
-    container.addEventListener('touchmove',  onTouchMove,  { passive: false });
-    container.addEventListener('touchend',   onTouchEnd,   { passive: true });
+    container.addEventListener('touchstart',  onTouchStart,  { passive: true });
+    container.addEventListener('touchmove',   onTouchMove,   { passive: false });
+    container.addEventListener('touchend',    onTouchEnd,    { passive: true });
+    container.addEventListener('touchcancel', onTouchCancel, { passive: true });
     return () => {
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove',  onTouchMove);
-      container.removeEventListener('touchend',   onTouchEnd);
+      container.removeEventListener('touchstart',  onTouchStart);
+      container.removeEventListener('touchmove',   onTouchMove);
+      container.removeEventListener('touchend',    onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchCancel);
     };
   }, [scrollRoot, updateTab]);
 
@@ -355,10 +391,13 @@ export function PDFViewer() {
         )}
         onScroll={handleScroll}
       >
-        <div className={cn(
-          'flex flex-col items-center gap-4 py-6 min-h-full',
-          focusMode && 'py-2 gap-2',
-        )}>
+        <div
+          ref={pagesContainerRef}
+          className={cn(
+            'flex flex-col items-center gap-4 py-6 min-h-full',
+            focusMode && 'py-2 gap-2',
+          )}
+        >
           {pageNumbers.map(pageNum => (
             <VirtualPage
               key={pageNum}

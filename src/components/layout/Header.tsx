@@ -253,18 +253,19 @@ export function Header() {
         )}
       </div>
 
-      {/* Center section - zoom controls when reading */}
+      {/* Center section — zoom controls + document title */}
       {isReader && (
-        <div className="flex-1 flex items-center justify-center gap-1">
-          <IconButton onClick={handleZoomOut} tooltip="Zoom out" shortcut="Ctrl+-" size="sm">
+        <div className="flex-1 flex items-center justify-center gap-1 min-w-0">
+          {/* Zoom out — hidden on mobile (pinch zoom available) */}
+          <IconButton onClick={handleZoomOut} tooltip="Zoom out" shortcut="Ctrl+-" size="sm" className="hidden md:inline-flex">
             <ZoomOut size={16} />
           </IconButton>
 
-          {/* Zoom level picker */}
+          {/* Zoom level picker — always visible */}
           <div className="relative" ref={zoomMenuRef}>
             <button
               onClick={() => setZoomMenuOpen(s => !s)}
-              className="flex items-center gap-0.5 min-w-[64px] h-7 px-2 rounded-lg text-xs font-medium text-on-surface-secondary hover:bg-white/10 transition-colors"
+              className="flex items-center gap-0.5 min-w-[56px] h-7 px-2 rounded-lg text-xs font-medium text-on-surface-secondary hover:bg-white/10 transition-colors"
             >
               {Math.round(activeTab.zoom * 100)}%
               <ChevronDown size={11} className="ml-0.5" />
@@ -308,9 +309,15 @@ export function Header() {
             )}
           </div>
 
-          <IconButton onClick={handleZoomIn} tooltip="Zoom in" shortcut="Ctrl+=" size="sm">
+          {/* Zoom in — hidden on mobile */}
+          <IconButton onClick={handleZoomIn} tooltip="Zoom in" shortcut="Ctrl+=" size="sm" className="hidden md:inline-flex">
             <ZoomIn size={16} />
           </IconButton>
+
+          {/* Document title — shown on mobile where the ± buttons are hidden */}
+          <span className="md:hidden ml-2 text-xs font-medium text-on-surface truncate max-w-[140px]">
+            {activeTab.name}
+          </span>
         </div>
       )}
 
@@ -341,19 +348,22 @@ export function Header() {
           </IconButton>
         )}
 
+        {/* Print — hidden on mobile (fits better in a menu) */}
         {isReader && (
-          <IconButton
-            onClick={handlePrint}
-            tooltip="Print document (Ctrl+P)"
-            size="sm"
-          >
-            <Printer size={16} />
-          </IconButton>
+          <div className="hidden sm:contents">
+            <IconButton
+              onClick={handlePrint}
+              tooltip="Print document (Ctrl+P)"
+              size="sm"
+            >
+              <Printer size={16} />
+            </IconButton>
+          </div>
         )}
 
-        {/* Export/Download dropdown */}
+        {/* Export/Download — hidden on mobile */}
         {isReader && (
-          <div className="relative" ref={exportMenuRef}>
+          <div className="relative hidden sm:block" ref={exportMenuRef}>
             <IconButton
               tooltip="Export / Download"
               size="sm"
@@ -384,14 +394,17 @@ export function Header() {
           </div>
         )}
 
+        {/* Focus mode — hidden on mobile */}
         {isReader && (
-          <IconButton
-            onClick={() => setFocusMode(true)}
-            tooltip="Focus mode (F11)"
-            size="sm"
-          >
-            <Maximize2 size={16} />
-          </IconButton>
+          <div className="hidden sm:contents">
+            <IconButton
+              onClick={() => setFocusMode(true)}
+              tooltip="Focus mode (F11)"
+              size="sm"
+            >
+              <Maximize2 size={16} />
+            </IconButton>
+          </div>
         )}
 
         <IconButton onClick={cycleTheme} tooltip={`Theme: ${theme}`} size="sm">

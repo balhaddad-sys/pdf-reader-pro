@@ -45,9 +45,8 @@ export default function App() {
 
   return (
     <DropZone onDrop={handleFileDrop} fullScreen className="h-dvh flex flex-col bg-surface-0">
-      {/* Header */}
-      {!focusMode && <Header />}
-      {focusMode && <Header />}
+      {/* Header (always rendered; handles focus-mode appearance internally) */}
+      <Header />
 
       {/* Tab bar (only when multiple tabs) */}
       {isReader && !focusMode && <TabBar />}

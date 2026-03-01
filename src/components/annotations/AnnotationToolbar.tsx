@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
 import {
   MousePointer2, Highlighter, Underline, Strikethrough,
   MessageSquare, Pencil, Eraser, Square, Undo2, Redo2,
-  Type, PenLine, Stamp, Circle, Minus, MoveRight, MoreHorizontal, ChevronUp,
+  Type, PenLine, Stamp, Circle, Minus, MoveRight,
 } from 'lucide-react';
 import { IconButton } from '@/components/common/IconButton';
 import { useUIStore } from '@/stores/uiStore';
@@ -19,27 +19,27 @@ interface ToolDef {
   shortcut?: string;
 }
 
-// ─── Tool lists ──────────────────────────────────────────────────────────────
+// ─── Tool list ────────────────────────────────────────────────────────────────
+// All tools in one flat array — no "More" button needed.
+// Scroll horizontally on mobile to access any tool instantly.
 
-/** Always shown on every screen size */
-const essentialTools: ToolDef[] = [
-  { id: 'select',    icon: MousePointer2, label: 'Select',    shortcut: 'V' },
-  { id: 'highlight', icon: Highlighter,   label: 'Highlight', shortcut: 'H' },
-  { id: 'freehand',  icon: Pencil,        label: 'Draw',      shortcut: 'P' },
-  { id: 'eraser',    icon: Eraser,        label: 'Eraser',    shortcut: 'E' },
-  { id: 'note',      icon: MessageSquare, label: 'Note',      shortcut: 'N' },
-];
-
-/** Hidden on mobile unless the user taps "More"; always shown on desktop */
-const extendedTools: ToolDef[] = [
-  { id: 'underline',     icon: Underline,     label: 'Underline',        shortcut: 'U' },
+const allTools: ToolDef[] = [
+  { id: 'select',        icon: MousePointer2, label: 'Select',        shortcut: 'V' },
+  { id: 'highlight',     icon: Highlighter,   label: 'Highlight',     shortcut: 'H' },
+  { id: 'underline',     icon: Underline,     label: 'Underline',     shortcut: 'U' },
   { id: 'strikethrough', icon: Strikethrough, label: 'Strikethrough' },
   { id: 'squiggly',      icon: Underline,     label: 'Squiggly' },
-  { id: 'text',          icon: Type,          label: 'Text box',         shortcut: 'T' },
-  { id: 'shape',         icon: Square,        label: 'Shape',            shortcut: 'S' },
+  { id: 'freehand',      icon: Pencil,        label: 'Draw',          shortcut: 'P' },
+  { id: 'eraser',        icon: Eraser,        label: 'Eraser',        shortcut: 'E' },
+  { id: 'note',          icon: MessageSquare, label: 'Note',          shortcut: 'N' },
+  { id: 'text',          icon: Type,          label: 'Text',          shortcut: 'T' },
+  { id: 'shape',         icon: Square,        label: 'Shape',         shortcut: 'S' },
   { id: 'signature',     icon: PenLine,       label: 'Signature' },
   { id: 'stamp',         icon: Stamp,         label: 'Stamp' },
 ];
+
+// Visual group separators: a thin divider is inserted BEFORE these tool IDs.
+const GROUP_START = new Set<AnnotationTool>(['highlight', 'freehand', 'note', 'shape']);
 
 const shapeTypes: { id: ShapeSubType; icon: typeof Square; label: string }[] = [
   { id: 'rectangle', icon: Square,    label: 'Rectangle' },
@@ -50,28 +50,9 @@ const shapeTypes: { id: ShapeSubType; icon: typeof Square; label: string }[] = [
 
 const STROKE_WIDTHS = [1, 2, 4, 8];
 
-// ─── Responsive hook ─────────────────────────────────────────────────────────
-
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    setIsMobile(mq.matches);
-    return () => mq.removeEventListener('change', handler);
-  }, [breakpoint]);
-  return isMobile;
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AnnotationToolbar() {
-  const isMobile = useIsMobile();
-  const [moreOpen, setMoreOpen] = useState(false);
-
   const activeTool       = useUIStore(s => s.activeTool);
   const setActiveTool    = useUIStore(s => s.setActiveTool);
   const activeColor      = useUIStore(s => s.activeColor);
@@ -113,74 +94,40 @@ export function AnnotationToolbar() {
     setActiveTool(activeTool === toolId ? null : toolId);
   };
 
-  // On mobile show only essentials unless expanded; on desktop always show all
-  const visibleTools = isMobile && !moreOpen
-    ? essentialTools
-    : [...essentialTools, ...extendedTools];
-
-  // Active tool name (shown on mobile as context indicator)
-  const activeToolDef = [...essentialTools, ...extendedTools].find(t => t.id === activeTool);
-
   return (
     <div className="shrink-0 bg-surface-1 border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
-      {/* ── Active tool chip (mobile only, shown when a tool is active) ────── */}
-      {isMobile && activeTool && activeTool !== 'select' && activeToolDef && (
-        <div className="flex items-center justify-between px-3 py-1 bg-brand-500/10 border-b border-brand-500/20">
-          <span className="text-xs font-medium text-brand-400">
-            {activeToolDef.label} active
-          </span>
-          <button
-            onClick={() => setActiveTool(null)}
-            className="text-2xs text-on-surface-secondary hover:text-on-surface px-2 py-0.5 rounded bg-white/5"
-          >
-            Done
-          </button>
-        </div>
-      )}
-
-      {/* ── Main toolbar row ─────────────────────────────────────────────── */}
+      {/* ── Main toolbar row ──────────────────────────────────────────────────
+           All tools are always visible — scroll horizontally on mobile.
+           No "More" button, no hidden tools, no active-tool chip.          */}
       <div
         className="flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 md:justify-center md:px-3 md:h-12 md:py-0"
         style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
       >
-        {/* Tool buttons */}
-        <div className="flex items-center gap-1 shrink-0">
-          {visibleTools.map(tool => (
-            <IconButton
-              key={tool.id}
-              tooltip={tool.label}
-              shortcut={tool.shortcut}
-              tooltipSide="top"
-              size="sm"
-              active={activeTool === tool.id}
-              onClick={() => handleToolClick(tool.id)}
-            >
-              <tool.icon size={16} />
-            </IconButton>
+        {/* Tool buttons with visual group separators */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {allTools.map(tool => (
+            <React.Fragment key={tool.id}>
+              {GROUP_START.has(tool.id) && (
+                <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
+              )}
+              <IconButton
+                tooltip={tool.label}
+                shortcut={tool.shortcut}
+                tooltipSide="top"
+                size="sm"
+                active={activeTool === tool.id}
+                onClick={() => handleToolClick(tool.id)}
+              >
+                <tool.icon size={16} />
+              </IconButton>
+            </React.Fragment>
           ))}
         </div>
 
-        {/* "More / Less" toggle — mobile only */}
-        {isMobile && (
-          <>
-            <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
-            <IconButton
-              tooltip={moreOpen ? 'Show less' : 'More tools'}
-              tooltipSide="top"
-              size="sm"
-              active={moreOpen}
-              onClick={() => setMoreOpen(v => !v)}
-              className="shrink-0"
-            >
-              {moreOpen ? <ChevronUp size={15} /> : <MoreHorizontal size={15} />}
-            </IconButton>
-          </>
-        )}
-
         <div className="w-px h-6 bg-border mx-1 shrink-0" />
 
-        {/* Color picker */}
+        {/* Color swatches — inline so they're reachable by scrolling on mobile */}
         {showColorPicker && (
           <>
             <div className="flex items-center gap-1.5 px-1 shrink-0">
@@ -190,7 +137,6 @@ export function AnnotationToolbar() {
                   onClick={() => setActiveColor(color.value)}
                   className={cn(
                     'rounded-full transition-all border-2 shrink-0',
-                    // Larger on mobile for easier tapping
                     'w-7 h-7 md:w-5 md:h-5',
                     activeColor === color.value
                       ? 'border-white scale-110 shadow-glow'
@@ -222,7 +168,7 @@ export function AnnotationToolbar() {
         </div>
       </div>
 
-      {/* ── Secondary row: shape + stroke width ──────────────────────────── */}
+      {/* ── Secondary row: shape sub-type + stroke width ─────────────────── */}
       {(showShapePicker || showStrokeWidth) && (
         <div
           className="flex items-center gap-2 overflow-x-auto px-2 py-1.5 border-t border-border/50 bg-surface-0/50 md:justify-center md:h-9 md:py-0"

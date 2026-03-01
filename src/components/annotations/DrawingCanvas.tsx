@@ -381,6 +381,10 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
   const isInteractive = activeTool === 'freehand' || activeTool === 'eraser'
     || activeTool === 'shape' || activeTool === 'text' || activeTool === 'note'
     || activeTool === 'signature' || activeTool === 'stamp';
+  // Drawing tools need touchAction:none to prevent scroll stealing mid-stroke.
+  // Tap-only tools (note/text/signature/stamp) allow pan so the user can scroll
+  // to position before tapping to place.
+  const isStrokeTool = activeTool === 'freehand' || activeTool === 'eraser' || activeTool === 'shape';
 
   return (
     <>
@@ -389,8 +393,9 @@ export function DrawingCanvas({ pageNumber, zoom }: DrawingCanvasProps) {
         className="absolute inset-0 z-10"
         style={{
           pointerEvents: isInteractive ? 'auto' : 'none',
-          // Prevent browser scroll/zoom from stealing touch events while drawing
-          touchAction: isInteractive ? 'none' : 'auto',
+          // Stroke tools need none to prevent scroll mid-draw.
+          // Tap-only tools use pan-x pan-y so the user can still scroll to position.
+          touchAction: isStrokeTool ? 'none' : (isInteractive ? 'pan-x pan-y' : 'auto'),
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

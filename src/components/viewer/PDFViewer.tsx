@@ -247,6 +247,7 @@ export function PDFViewer() {
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
+        e.preventDefault(); // block browser from committing to native zoom at touchstart
         pinchDist = getDist(e.touches);
         pinchZoom = activeTabRef.current?.zoom ?? 1;
       }
@@ -266,7 +267,7 @@ export function PDFViewer() {
     // iOS Safari fires 'gesturechange' for pinch — preventDefault stops native zoom
     const onGestureChange = (e: Event) => e.preventDefault();
 
-    container.addEventListener('touchstart', onTouchStart, { passive: true });
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd);
     container.addEventListener('gesturestart', onGestureChange, { passive: false });

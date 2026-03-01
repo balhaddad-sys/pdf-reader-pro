@@ -27,7 +27,7 @@ export function StatusBar() {
   };
 
   return (
-    <footer className="h-7 flex items-center justify-between px-3 bg-surface-1 border-t border-border text-2xs text-on-surface-secondary shrink-0">
+    <footer className="flex items-center justify-between px-3 bg-surface-1 border-t border-border text-2xs text-on-surface-secondary shrink-0" style={{ minHeight: '1.75rem', paddingTop: '0.25rem', paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}>
       <div className="flex items-center gap-3">
         <span className="font-medium text-on-surface truncate max-w-[200px]">{doc.name}</span>
       </div>

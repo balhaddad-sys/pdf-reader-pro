@@ -12,6 +12,7 @@ interface DocumentState {
   libraryLayout: LibraryLayout;
   librarySearch: string;
   isLoading: boolean;
+  openingDocumentId: string | null;   // which document card is currently being opened
 
   // Tabs & active document
   tabs: TabInfo[];
@@ -42,6 +43,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   libraryLayout: 'grid',
   librarySearch: '',
   isLoading: false,
+  openingDocumentId: null,
   tabs: [],
   activeTabId: null,
   pdfInstances: new Map(),
@@ -66,8 +68,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       throw new Error('The file is not a valid PDF');
     }
 
-    // Load PDF to get metadata
-    const pdf = await loadPDF(data);
+    // pdfjs transfers the ArrayBuffer to its worker (zero-copy), which detaches it
+    // in the main thread. Pass a copy so the original `data` stays valid for IndexedDB.
+    const pdf = await loadPDF(data.slice(0));
     const firstPage = await pdf.getPage(1);
     const thumbnail = await renderPageThumbnail(firstPage);
 
@@ -149,10 +152,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       return;
     }
 
+    set({ openingDocumentId: id });
+    try {
     // Load PDF if not cached
     if (!pdfInstances.has(id)) {
       const fileData = await db.getFile(id);
-      if (!fileData) return;
+      if (!fileData) { set({ openingDocumentId: null }); return; }
       const pdf = await loadPDF(fileData);
       pdfInstances.set(id, pdf);
     }
@@ -163,18 +168,35 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     // Update last opened
     await get().updateDocument(id, { lastOpenedAt: Date.now() });
 
+    // On narrow screens auto-fit the page width so it never overflows horizontally
+    let initialZoom = doc.zoom || 1;
+    if (window.innerWidth < 768) {
+      try {
+        const pdfInst = pdfInstances.get(id)!;
+        const firstPage = await pdfInst.getPage(1);
+        const naturalWidth = firstPage.getViewport({ scale: 1 }).width;
+        const available = window.innerWidth - 32;
+        initialZoom = Math.max(0.4, Math.min(1.5, Math.round((available / naturalWidth) * 100) / 100));
+      } catch { /* keep default */ }
+    }
+
     const tab: TabInfo = {
       id: generateId(),
       documentId: id,
       name: doc.name,
       page: doc.lastPage || 1,
-      zoom: doc.zoom || 1,
+      zoom: initialZoom,
     };
 
     set(state => ({
       tabs: [...state.tabs, tab],
       activeTabId: tab.id,
+      openingDocumentId: null,
     }));
+    } catch (err) {
+      set({ openingDocumentId: null });
+      throw err;
+    }
   },
 
   closeTab: (tabId: string) => {

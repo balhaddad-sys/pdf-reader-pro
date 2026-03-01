@@ -1,5 +1,8 @@
-import { useRef, useEffect, useState, memo } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { renderPage } from '@/utils/pdf';
+import { useUIStore } from '@/stores/uiStore';
+import { useAnnotationStore } from '@/stores/annotationStore';
+import { useDocumentStore } from '@/stores/documentStore';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
 interface PageRendererProps {
@@ -11,14 +14,23 @@ interface PageRendererProps {
 export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }: PageRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
+  const annotLayerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const renderTaskRef = useRef<{ cancel: boolean }>({ cancel: false });
 
+  const activeTool = useUIStore(s => s.activeTool);
+  const activeColor = useUIStore(s => s.activeColor);
+  const annotations = useAnnotationStore(s => s.annotations);
+  const addAnnotation = useAnnotationStore(s => s.addAnnotation);
+  const tabs = useDocumentStore(s => s.tabs);
+  const activeTabId = useDocumentStore(s => s.activeTabId);
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // ── Render PDF canvas + text layer ────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Cancel previous render
     renderTaskRef.current.cancel = true;
     const currentTask = { cancel: false };
     renderTaskRef.current = currentTask;
@@ -31,15 +43,11 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         if (cancelled || currentTask.cancel) return;
 
         const viewport = page.getViewport({ scale: zoom });
-        setDimensions({
-          width: viewport.width,
-          height: viewport.height,
-        });
+        setDimensions({ width: viewport.width, height: viewport.height });
 
         await renderPage(page, canvas, zoom);
         if (cancelled || currentTask.cancel) return;
 
-        // Render text layer for selection
         if (textLayerRef.current) {
           const textContent = await page.getTextContent();
           if (cancelled || currentTask.cancel) return;
@@ -47,14 +55,10 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
           const textLayer = textLayerRef.current;
           textLayer.innerHTML = '';
 
-          const dpr = window.devicePixelRatio || 1;
-
           textContent.items.forEach(item => {
             if (!('str' in item) || !item.str) return;
-
             const tx = item.transform;
             const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-
             const span = document.createElement('span');
             span.textContent = item.str;
             span.style.position = 'absolute';
@@ -65,14 +69,6 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
             span.style.color = 'transparent';
             span.style.whiteSpace = 'pre';
             span.style.transformOrigin = '0% 0%';
-
-            if (item.width) {
-              const expectedWidth = item.width * zoom;
-              span.style.letterSpacing = '0px';
-              // We'll adjust after measuring if needed
-              const _ = expectedWidth; void _;
-            }
-
             textLayer.appendChild(span);
           });
         }
@@ -84,11 +80,101 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     };
 
     doRender();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [pdf, pageNumber, zoom]);
+
+  // ── Render text-based annotation overlays ─────────────────────────────────
+  useEffect(() => {
+    const layer = annotLayerRef.current;
+    if (!layer) return;
+    layer.innerHTML = '';
+
+    const pageAnnotations = annotations.filter(
+      a => a.page === pageNumber && a.rects && a.rects.length > 0,
+    );
+
+    pageAnnotations.forEach(ann => {
+      ann.rects!.forEach(rect => {
+        const el = document.createElement('div');
+        el.style.position = 'absolute';
+        el.style.left = `${rect.x}px`;
+        el.style.top = `${rect.y}px`;
+        el.style.width = `${rect.width}px`;
+        el.style.height = `${rect.height}px`;
+        el.style.pointerEvents = 'none';
+        el.title = ann.selectedText || ann.content || '';
+
+        if (ann.type === 'highlight') {
+          el.style.backgroundColor = ann.color + '55';
+          el.style.mixBlendMode = 'multiply';
+        } else if (ann.type === 'underline') {
+          el.style.borderBottom = `2px solid ${ann.color}`;
+        } else if (ann.type === 'strikethrough') {
+          // Center a horizontal line through the rect
+          el.style.top = `${rect.y + rect.height / 2 - 1}px`;
+          el.style.height = '2px';
+          el.style.backgroundColor = ann.color;
+        } else if (ann.type === 'squiggly') {
+          const encodedColor = encodeURIComponent(ann.color);
+          el.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 4 Q2 0 4 4 Q6 8 8 4' fill='none' stroke='${encodedColor}' stroke-width='1.5'/%3E%3C/svg%3E")`;
+          el.style.backgroundRepeat = 'repeat-x';
+          el.style.backgroundPosition = `0 ${rect.height - 4}px`;
+          el.style.backgroundSize = '8px 4px';
+        } else if (ann.type === 'note') {
+          el.style.backgroundColor = ann.color + '33';
+          el.style.borderBottom = `1.5px dashed ${ann.color}`;
+        }
+
+        layer.appendChild(el);
+      });
+    });
+  }, [annotations, pageNumber]);
+
+  // ── Text selection → annotation creation ──────────────────────────────────
+  const handleTextSelection = useCallback(() => {
+    if (!activeTab) return;
+
+    const textAnnotTools = ['highlight', 'underline', 'strikethrough', 'squiggly', 'note'] as const;
+    type TextAnnotTool = typeof textAnnotTools[number];
+    if (!textAnnotTools.includes(activeTool as TextAnnotTool)) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    const textLayer = textLayerRef.current;
+    if (!textLayer || !textLayer.contains(range.commonAncestorContainer)) return;
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
+
+    const rects: DOMRect[] = [];
+    const layerRect = textLayer.getBoundingClientRect();
+
+    Array.from(range.getClientRects()).forEach(r => {
+      if (r.width > 0 && r.height > 0) {
+        rects.push(new DOMRect(
+          r.left - layerRect.left,
+          r.top - layerRect.top,
+          r.width,
+          r.height,
+        ));
+      }
+    });
+
+    if (rects.length === 0) return;
+
+    addAnnotation({
+      documentId: activeTab.documentId,
+      page: pageNumber,
+      type: activeTool as TextAnnotTool,
+      color: activeColor,
+      rects,
+      selectedText,
+    });
+
+    selection.removeAllRanges();
+  }, [activeTool, activeColor, activeTab, pageNumber, addAnnotation]);
 
   return (
     <div
@@ -100,11 +186,21 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         minHeight: '280px',
       }}
     >
+      {/* PDF canvas */}
       <canvas ref={canvasRef} className="block" />
+
+      {/* Annotation visual overlay (highlight, underline, strikethrough, squiggly) */}
+      <div
+        ref={annotLayerRef}
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+      />
+
+      {/* Text selection layer */}
       <div
         ref={textLayerRef}
         className="absolute inset-0 overflow-hidden leading-none select-text"
         style={{ mixBlendMode: 'multiply' }}
+        onPointerUp={handleTextSelection}
       />
     </div>
   );

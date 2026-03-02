@@ -21,10 +21,7 @@ const config: CapacitorConfig = {
   },
 
   android: {
-    // Allow cleartext traffic to capacitor's internal server
     allowMixedContent: false,
-    // Edge-to-edge layout
-    adjustMarginsForEdgeToEdge: 'auto',
   },
 };
 

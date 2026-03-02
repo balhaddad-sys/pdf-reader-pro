@@ -27,6 +27,16 @@ jobs:
       # Cache Gradle files for faster subsequent builds
       - uses: gradle/actions/setup-gradle@v4
 
+      # ── Android SDK ────────────────────────────────────────────────────────
+      # ubuntu-latest ships with SDK but may be missing API 35 & build-tools 35.
+      # Capacitor 7 targets compileSdkVersion 35.
+      - name: Install Android SDK Platform 35
+        run: |
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0" 2>&1 | tail -5
+
       # ── Web build ──────────────────────────────────────────────────────────
       - name: Install dependencies
         run: npm install
@@ -43,6 +53,9 @@ jobs:
 
       - name: Sync web assets into Android project
         run: npx cap sync android
+
+      - name: Create local.properties for Gradle
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Make Gradlew executable
         run: chmod +x android/gradlew

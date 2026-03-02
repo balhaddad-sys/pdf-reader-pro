@@ -69,23 +69,31 @@ jobs:
         if: env.KEYSTORE_BASE64 != ''
         run: echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
 
-      # ── Release build (signed AAB for Play Store) ─────────────────────────
-      - name: Build Release AAB
+      # ── Release builds (signed AAB for Play Store + signed APK for sideloading)
+      - name: Build Release AAB + APK
         if: env.KEYSTORE_BASE64 != ''
         working-directory: android
         run: |
-          ./gradlew bundleRelease \
+          ./gradlew bundleRelease assembleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
             -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
             -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
             -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
 
-      - name: Upload Release AAB
+      - name: Upload Release AAB (Play Store)
         if: env.KEYSTORE_BASE64 != ''
         uses: actions/upload-artifact@v4
         with:
           name: pdf-reader-pro-release-${{ github.run_number }}.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
+
+      - name: Upload Release APK (sideload / direct install)
+        if: env.KEYSTORE_BASE64 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-reader-pro-release-${{ github.run_number }}.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 90
 
       # ── Debug build (unsigned APK — runs only when no signing secrets) ─────

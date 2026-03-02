@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       # Cache Gradle files for faster subsequent builds
       - uses: gradle/actions/setup-gradle@v4

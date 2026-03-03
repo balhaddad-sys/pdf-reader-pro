@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
-import { getPageText } from '@/utils/pdf';
-import { askGemini } from '@/utils/ai';
+import { getPageText, renderPageThumbnail } from '@/utils/pdf';
+import { askGemini, askGeminiVision } from '@/utils/ai';
 import { cn } from '@/utils/helpers';
 
 export function AIDrawer() {
@@ -70,27 +70,39 @@ export function AIDrawer() {
     try {
       const pdf = getPdfInstance(activeTab.documentId);
       let pageText = '';
+      const pageImages: string[] = [];
       if (pdf) {
-        // Read current page + 2 pages before and after for better context
         const currentPage = activeTab.page;
         const startPage = Math.max(1, currentPage - 2);
         const endPage = Math.min(pdf.numPages, currentPage + 2);
-        const parts: string[] = [];
+        const textParts: string[] = [];
         for (let p = startPage; p <= endPage; p++) {
           const page = await pdf.getPage(p);
           const text = await getPageText(page);
           if (text.trim()) {
-            parts.push(p === currentPage ? `[CURRENT PAGE ${p}]\n${text}` : `[PAGE ${p}]\n${text}`);
+            textParts.push(p === currentPage ? `[CURRENT PAGE ${p}]\n${text}` : `[PAGE ${p}]\n${text}`);
           }
         }
-        pageText = parts.join('\n\n');
+        pageText = textParts.join('\n\n');
+
+        // If no text found, render pages as images for vision
+        if (!pageText.trim()) {
+          for (let p = startPage; p <= endPage; p++) {
+            const page = await pdf.getPage(p);
+            const img = await renderPageThumbnail(page, 800);
+            pageImages.push(img);
+          }
+        }
       }
-      if (!pageText.trim()) {
-        addMessage('ai', 'No readable text found on this page. The PDF may be a scanned image without a text layer.');
-        setLoading(false);
-        return;
+
+      let answer: string;
+      if (pageText.trim()) {
+        answer = await askGemini(pageText, q);
+      } else if (pageImages.length > 0) {
+        answer = await askGeminiVision(pageImages, q);
+      } else {
+        answer = 'No PDF content available. Please open a document first.';
       }
-      const answer = await askGemini(pageText, q);
       addMessage('ai', answer);
     } catch (err) {
       addMessage('ai', `Error: ${err instanceof Error ? err.message : 'Something went wrong'}`);

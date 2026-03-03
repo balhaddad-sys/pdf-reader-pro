@@ -71,8 +71,24 @@ export function AIDrawer() {
       const pdf = getPdfInstance(activeTab.documentId);
       let pageText = '';
       if (pdf) {
-        const page = await pdf.getPage(activeTab.page);
-        pageText = await getPageText(page);
+        // Read current page + 2 pages before and after for better context
+        const currentPage = activeTab.page;
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(pdf.numPages, currentPage + 2);
+        const parts: string[] = [];
+        for (let p = startPage; p <= endPage; p++) {
+          const page = await pdf.getPage(p);
+          const text = await getPageText(page);
+          if (text.trim()) {
+            parts.push(p === currentPage ? `[CURRENT PAGE ${p}]\n${text}` : `[PAGE ${p}]\n${text}`);
+          }
+        }
+        pageText = parts.join('\n\n');
+      }
+      if (!pageText.trim()) {
+        addMessage('ai', 'No readable text found on this page. The PDF may be a scanned image without a text layer.');
+        setLoading(false);
+        return;
       }
       const answer = await askGemini(pageText, q);
       addMessage('ai', answer);
@@ -133,7 +149,7 @@ export function AIDrawer() {
         {/* Page badge */}
         {activeTab && (
           <div className="px-4 py-2 text-2xs text-on-surface-secondary border-b border-border/50 bg-surface-1/50">
-            Reading <span className="font-medium text-on-surface">page {activeTab.page}</span> of {activeTab.name}
+            Reading <span className="font-medium text-on-surface">pages {Math.max(1, activeTab.page - 2)}–{activeTab.page}+</span> of {activeTab.name}
           </div>
         )}
 
@@ -156,7 +172,7 @@ export function AIDrawer() {
                   : 'mr-auto bg-surface-3 text-on-surface',
               )}
             >
-              <p className="whitespace-pre-wrap">{msg.text}</p>
+              <p dir="auto" className="whitespace-pre-wrap">{msg.text}</p>
             </div>
           ))}
           {loading && (

@@ -47,6 +47,8 @@ jobs:
 
       - name: Build web assets (Capacitor mode)
         run: npm run build:android
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
 
       # ── Android project setup ──────────────────────────────────────────────
       - name: Add Android platform

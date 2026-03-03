@@ -47,6 +47,13 @@ interface UIState {
   shortcutsOpen: boolean;
   setShortcutsOpen: (open: boolean) => void;
 
+  // AI assistant drawer
+  aiDrawerOpen: boolean;
+  setAiDrawerOpen: (open: boolean) => void;
+  aiMessages: { role: 'user' | 'ai'; text: string }[];
+  addAiMessage: (role: 'user' | 'ai', text: string) => void;
+  clearAiMessages: () => void;
+
   // Reading mode
   focusMode: boolean;
   setFocusMode: (focus: boolean) => void;
@@ -107,6 +114,12 @@ export const useUIStore = create<UIState>((set) => ({
   setSearchOpen: (open) => set({ searchOpen: open }),
   shortcutsOpen: false,
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+
+  aiDrawerOpen: false,
+  setAiDrawerOpen: (open) => set({ aiDrawerOpen: open }),
+  aiMessages: [],
+  addAiMessage: (role, text) => set(s => ({ aiMessages: [...s.aiMessages, { role, text }] })),
+  clearAiMessages: () => set({ aiMessages: [] }),
 
   focusMode: false,
   setFocusMode: (focus) => set({ focusMode: focus }),

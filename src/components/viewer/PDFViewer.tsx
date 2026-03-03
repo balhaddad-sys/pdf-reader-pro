@@ -8,6 +8,8 @@ import { SearchPanel } from './SearchPanel';
 import { DrawingCanvas } from '@/components/annotations/DrawingCanvas';
 import { SignatureDialog } from '@/components/annotations/SignatureDialog';
 import { StampPicker } from '@/components/annotations/StampPicker';
+import { AIDrawer } from './AIDrawer';
+import { Sparkles } from 'lucide-react';
 import { cn, debounce, clamp } from '@/utils/helpers';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
@@ -415,6 +417,16 @@ export function PDFViewer() {
       </div>
 
       <AnnotationToolbar />
+
+      {/* AI Assistant — floating button + drawer */}
+      <button
+        onClick={() => useUIStore.getState().setAiDrawerOpen(true)}
+        className="absolute right-4 bottom-20 z-20 w-11 h-11 flex items-center justify-center rounded-full bg-brand-500 text-white shadow-elevation-3 hover:bg-brand-600 active:scale-95 transition-all"
+        title="AI Assistant"
+      >
+        <Sparkles size={18} />
+      </button>
+      <AIDrawer />
 
       {signatureDialogOpen && <SignatureDialog />}
       {stampPickerOpen && <StampPicker />}

@@ -6,6 +6,19 @@ import { getPageText } from '@/utils/pdf';
 import { cn } from '@/utils/helpers';
 import type { SearchResult } from '@/types';
 
+/**
+ * Normalize text for search: strip Arabic diacritics (harakat/tashkeel),
+ * normalize Unicode (NFKD), and lowercase.
+ */
+function normalizeForSearch(text: string): string {
+  return text
+    .normalize('NFKD')
+    // Strip Arabic diacritics: Fathah, Dammah, Kasrah, Shadda, Sukun,
+    // Fathatan, Dammatan, Kasratan, superscript Alef, Quranic marks, Tatweel
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u0640]/g, '')
+    .toLowerCase();
+}
+
 export function SearchPanel() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -49,21 +62,36 @@ export function SearchPanel() {
 
     setSearching(true);
     const found: SearchResult[] = [];
-    const queryLower = query.toLowerCase();
+    const queryNorm = normalizeForSearch(query);
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const text = await getPageText(page);
-      const textLower = text.toLowerCase();
+      const textNorm = normalizeForSearch(text);
+
+      // Build a mapping from normalized index → original index so we can
+      // extract the correct context snippet from the original text.
+      const normToOrig: number[] = [];
+      let ni = 0;
+      for (let oi = 0; oi < text.length; oi++) {
+        const chunk = normalizeForSearch(text[oi]);
+        for (let ci = 0; ci < chunk.length; ci++) {
+          normToOrig[ni++] = oi;
+        }
+      }
+      // Sentinel: map past-end of normalized text to end of original
+      normToOrig[ni] = text.length;
 
       let idx = 0;
-      while ((idx = textLower.indexOf(queryLower, idx)) !== -1) {
+      while ((idx = textNorm.indexOf(queryNorm, idx)) !== -1) {
+        const origStart = normToOrig[idx] ?? 0;
+        const origEnd = normToOrig[idx + queryNorm.length] ?? text.length;
         found.push({
           page: i,
-          index: idx,
-          text: text.slice(Math.max(0, idx - 30), idx + query.length + 30),
+          index: origStart,
+          text: text.slice(Math.max(0, origStart - 30), origEnd + 30),
         });
-        idx += queryLower.length;
+        idx += queryNorm.length;
       }
     }
 
@@ -102,6 +130,7 @@ export function SearchPanel() {
         <input
           ref={inputRef}
           type="text"
+          dir="auto"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search in document..."
@@ -157,7 +186,7 @@ export function SearchPanel() {
               <span className="text-2xs text-on-surface-secondary font-mono shrink-0 mt-0.5">
                 p.{result.page}
               </span>
-              <span className="text-on-surface-secondary truncate">
+              <span dir="auto" className="text-on-surface-secondary truncate">
                 {result.text}
               </span>
             </button>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X, Send, Sparkles, Trash2, Copy, Check, Bot, BookOpen, Languages, ListChecks, FileText } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -9,7 +9,7 @@ import { cn } from '@/utils/helpers';
 // ── Inline markdown renderer ─────────────────────────────────────────────────
 function renderMarkdown(text: string) {
   const lines = text.split('\n');
-  const elements: JSX.Element[] = [];
+  const elements: React.JSX.Element[] = [];
   let listItems: string[] = [];
 
   const flushList = (key: string) => {
@@ -54,7 +54,7 @@ function renderMarkdown(text: string) {
 
 function formatInline(text: string) {
   // Bold, italic, inline code
-  const parts: (string | JSX.Element)[] = [];
+  const parts: (string | React.JSX.Element)[] = [];
   const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;

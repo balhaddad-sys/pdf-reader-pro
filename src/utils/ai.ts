@@ -1,7 +1,7 @@
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string || '';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 4;
 
 export async function askGemini(pageText: string, question: string): Promise<string> {
   if (!GEMINI_API_KEY) {
@@ -40,7 +40,7 @@ export async function askGemini(pageText: string, question: string): Promise<str
 
     if (response.status === 429) {
       // Rate limited — wait and retry with exponential backoff
-      const delay = (attempt + 1) * 2000; // 2s, 4s, 6s
+      const delay = (attempt + 1) * 3000; // 3s, 6s, 9s, 12s
       await new Promise(r => setTimeout(r, delay));
       continue;
     }

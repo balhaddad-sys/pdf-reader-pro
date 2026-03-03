@@ -3,6 +3,7 @@ import {
   MousePointer2, Highlighter, Underline, Strikethrough,
   MessageSquare, Pencil, Eraser, Square, Undo2, Redo2,
   Type, PenLine, Stamp, Circle, Minus, MoveRight,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Tooltip } from '@/components/common/Tooltip';
 import { IconButton } from '@/components/common/IconButton';
@@ -103,6 +104,8 @@ export function AnnotationToolbar() {
   const shapeSubType     = useUIStore(s => s.shapeSubType);
   const setShapeSubType  = useUIStore(s => s.setShapeSubType);
   const focusMode        = useUIStore(s => s.focusMode);
+  const toolbarCollapsed    = useUIStore(s => s.toolbarCollapsed);
+  const setToolbarCollapsed = useUIStore(s => s.setToolbarCollapsed);
   const setSignatureDialogOpen = useUIStore(s => s.setSignatureDialogOpen);
   const setStampPickerOpen     = useUIStore(s => s.setStampPickerOpen);
   const setPendingSignature    = useUIStore(s => s.setPendingSignature);
@@ -138,10 +141,18 @@ export function AnnotationToolbar() {
   return (
     <div className="shrink-0 bg-surface-1 border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
+      {/* ── Collapse / expand toggle ──────────────────────────────────────── */}
+      <button
+        onClick={() => setToolbarCollapsed(!toolbarCollapsed)}
+        className="w-full flex items-center justify-center h-6 text-on-surface-secondary hover:bg-white/5 transition-colors"
+      >
+        {toolbarCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
       {/* ── Main toolbar ──────────────────────────────────────────────────────
            Mobile: 44px tall buttons with icon + label, horizontal scroll.
            Desktop: 28px icon-only buttons, centered, no scroll needed.      */}
-      <div
+      {!toolbarCollapsed && <div
         className="flex items-center gap-0.5 overflow-x-auto px-2 py-1 md:justify-center md:px-3 md:h-12 md:py-0"
         style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
       >
@@ -203,10 +214,10 @@ export function AnnotationToolbar() {
             <Redo2 size={16} />
           </IconButton>
         </div>
-      </div>
+      </div>}
 
       {/* ── Secondary row: shape sub-type + stroke width ─────────────────── */}
-      {(showShapePicker || showStrokeWidth) && (
+      {!toolbarCollapsed && (showShapePicker || showStrokeWidth) && (
         <div
           className="flex items-center gap-2 overflow-x-auto px-2 py-1.5 border-t border-border/50 bg-surface-0/50 md:justify-center md:h-9 md:py-0"
           style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}

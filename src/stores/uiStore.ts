@@ -18,6 +18,8 @@ interface UIState {
   openSidebar: (panel: SidebarPanel) => void;
 
   // Toolbar
+  toolbarCollapsed: boolean;
+  setToolbarCollapsed: (collapsed: boolean) => void;
   activeTool: AnnotationTool;
   setActiveTool: (tool: AnnotationTool) => void;
   activeColor: string;
@@ -79,6 +81,8 @@ export const useUIStore = create<UIState>((set) => ({
   setSidebarPanel: (panel) => set({ sidebarPanel: panel }),
   openSidebar: (panel) => set({ sidebarOpen: true, sidebarPanel: panel }),
 
+  toolbarCollapsed: false,
+  setToolbarCollapsed: (collapsed) => set({ toolbarCollapsed: collapsed }),
   activeTool: null,
   setActiveTool: (tool) => set({ activeTool: tool }),
   activeColor: '#fde047',

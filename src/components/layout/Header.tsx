@@ -214,7 +214,7 @@ export function Header() {
   }
 
   return (
-    <header className="h-13 flex items-center gap-1 px-3 bg-surface-1 border-b border-border shrink-0 z-30">
+    <header className="h-13 flex items-center gap-1 px-3 bg-surface-1 border-b border-border shrink-0 z-30" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Left section */}
       <div className="flex items-center gap-1">
         {isReader && (

@@ -3,7 +3,14 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemi
 
 const MAX_RETRIES = 4;
 
-const SYSTEM_PROMPT = 'You are a helpful PDF reading assistant. Answer the user\'s question based on the page content provided. Be concise and accurate. IMPORTANT: Always reply in the same language the user writes their question in. If the user asks in Arabic, reply in Arabic. If they ask in French, reply in French. Match the user\'s language exactly.';
+const SYSTEM_PROMPT = [
+  'You are a helpful PDF reading assistant embedded in a PDF reader app.',
+  'Answer based on the page content provided. Be concise, well-structured, and accurate.',
+  'Use markdown formatting: **bold** for key terms, bullet lists for multiple points, `code` for technical terms.',
+  'IMPORTANT: Always reply in the same language the user writes their question in.',
+  'If the user asks in Arabic, reply in Arabic. If French, reply in French. Match the user\'s language exactly.',
+  'If the user\'s message references previous conversation, use the chat history to understand context.',
+].join(' ');
 
 async function callGemini(body: string): Promise<string> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -28,7 +35,7 @@ async function callGemini(body: string): Promise<string> {
     return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response from Gemini.';
   }
 
-  return 'Rate limited by Gemini API. Please wait a moment and try again.';
+  return 'Rate limited. Please wait a moment and try again.';
 }
 
 /** Text-based: send extracted page text */
@@ -49,11 +56,11 @@ export async function askGemini(pageText: string, question: string): Promise<str
           trimmedText,
           '--- END PAGE CONTENT ---',
           '',
-          `User question: ${question}`,
+          question,
         ].join('\n'),
       }],
     }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
   });
 
   return callGemini(body);
@@ -65,13 +72,11 @@ export async function askGeminiVision(imageDataUrls: string[], question: string)
     return 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your .env file.';
   }
 
-  // Build parts array: system prompt text, then each image, then the question
   const parts: Record<string, unknown>[] = [
     { text: SYSTEM_PROMPT + '\n\nThe user is viewing a PDF. Below are screenshots of the pages. Read the text from the images and answer the question.' },
   ];
 
   for (const dataUrl of imageDataUrls) {
-    // dataUrl format: "data:image/jpeg;base64,/9j/4AAQ..."
     const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
     if (match) {
       parts.push({
@@ -83,11 +88,11 @@ export async function askGeminiVision(imageDataUrls: string[], question: string)
     }
   }
 
-  parts.push({ text: `User question: ${question}` });
+  parts.push({ text: question });
 
   const body = JSON.stringify({
     contents: [{ parts }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
   });
 
   return callGemini(body);

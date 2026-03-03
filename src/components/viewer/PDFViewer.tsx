@@ -421,7 +421,7 @@ export function PDFViewer() {
       {/* AI Assistant — floating button + drawer */}
       <button
         onClick={() => useUIStore.getState().setAiDrawerOpen(true)}
-        className="absolute right-4 bottom-20 z-20 w-11 h-11 flex items-center justify-center rounded-full bg-brand-500 text-white shadow-elevation-3 hover:bg-brand-600 active:scale-95 transition-all"
+        className="absolute right-4 bottom-20 z-20 w-12 h-12 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-elevation-3 shadow-brand-500/25 hover:shadow-glow active:scale-95 transition-all"
         title="AI Assistant"
       >
         <Sparkles size={18} />

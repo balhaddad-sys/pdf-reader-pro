@@ -13,7 +13,7 @@ export async function askGemini(pageText: string, question: string): Promise<str
       contents: [{
         parts: [{
           text: [
-            'You are a helpful PDF reading assistant. Answer the user\'s question based on the page content provided. Be concise and accurate.',
+            'You are a helpful PDF reading assistant. Answer the user\'s question based on the page content provided. Be concise and accurate. IMPORTANT: Always reply in the same language the user writes their question in. If the user asks in Arabic, reply in Arabic. If they ask in French, reply in French. Match the user\'s language exactly.',
             '',
             '--- PAGE CONTENT ---',
             pageText,

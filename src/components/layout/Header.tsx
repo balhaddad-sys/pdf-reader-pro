@@ -192,25 +192,53 @@ export function Header() {
       ? <Moon size={18} />
       : <Monitor size={18} />;
 
+  const [focusBarVisible, setFocusBarVisible] = useState(false);
+
+  // Auto-hide focus bar after 3 seconds
+  useEffect(() => {
+    if (!focusBarVisible) return;
+    const timer = setTimeout(() => setFocusBarVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, [focusBarVisible]);
+
   if (focusMode) {
     return (
-      <header className="fixed top-0 left-0 right-0 z-40 h-0 group">
-        <div className={cn(
-          'h-12 flex items-center justify-center gap-2 px-4',
-          'bg-surface-1/80 backdrop-blur-xl border-b border-border/50',
-          'opacity-0 group-hover:opacity-100 transition-opacity duration-300',
-          '-translate-y-full group-hover:translate-y-0 transition-transform duration-300',
-        )}>
-          <IconButton onClick={() => setFocusMode(false)} tooltip="Exit focus mode" size="sm">
-            <Minimize2 size={16} />
-          </IconButton>
-          {activeTab && (
-            <span className="text-xs text-on-surface-secondary">
-              Page {activeTab.page} &middot; {Math.round(activeTab.zoom * 100)}%
-            </span>
-          )}
-        </div>
-      </header>
+      <>
+        <header className="fixed top-0 left-0 right-0 z-40 h-0 group">
+          {/* Invisible touch/click hit zone at top of screen */}
+          <div
+            className="absolute top-0 left-0 right-0 h-5 z-50 cursor-pointer"
+            onClick={() => setFocusBarVisible(v => !v)}
+            onTouchStart={() => setFocusBarVisible(v => !v)}
+          />
+          <div className={cn(
+            'h-12 flex items-center justify-center gap-2 px-4',
+            'bg-surface-1/80 backdrop-blur-xl border-b border-border/50',
+            'transition-all duration-300',
+            focusBarVisible
+              ? 'opacity-100 translate-y-0'
+              : 'opacity-0 -translate-y-full group-hover:opacity-100 group-hover:translate-y-0',
+          )}>
+            <IconButton onClick={() => setFocusMode(false)} tooltip="Exit focus mode" size="sm">
+              <Minimize2 size={16} />
+            </IconButton>
+            {activeTab && (
+              <span className="text-xs text-on-surface-secondary">
+                Page {activeTab.page} &middot; {Math.round(activeTab.zoom * 100)}%
+              </span>
+            )}
+          </div>
+        </header>
+
+        {/* Persistent floating exit button for mobile/touch */}
+        <button
+          onClick={() => setFocusMode(false)}
+          className="fixed bottom-6 right-6 z-50 sm:hidden w-10 h-10 rounded-full bg-surface-1/90 backdrop-blur-xl border border-border shadow-elevation-3 flex items-center justify-center text-on-surface-secondary active:scale-95 transition-transform"
+          aria-label="Exit focus mode"
+        >
+          <Minimize2 size={16} />
+        </button>
+      </>
     );
   }
 

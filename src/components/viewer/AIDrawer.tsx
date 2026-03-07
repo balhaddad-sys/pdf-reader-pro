@@ -3,7 +3,7 @@ import { X, Send, Sparkles, Trash2, Copy, Check, Bot, BookOpen, Languages, ListC
 import { useUIStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { getPageText, renderPageThumbnail } from '@/utils/pdf';
-import { askGemini, askGeminiVision } from '@/utils/ai';
+import { askClaude, askClaudeVision } from '@/utils/ai';
 import { cn } from '@/utils/helpers';
 
 // ── Inline markdown renderer ─────────────────────────────────────────────────
@@ -228,9 +228,9 @@ export function AIDrawer() {
 
       let answer: string;
       if (pageText.trim()) {
-        answer = await askGemini(pageText, fullQuestion);
+        answer = await askClaude(pageText, fullQuestion);
       } else if (pageImages.length > 0) {
-        answer = await askGeminiVision(pageImages, fullQuestion);
+        answer = await askClaudeVision(pageImages, fullQuestion);
       } else {
         answer = 'No PDF content available. Please open a document first.';
       }

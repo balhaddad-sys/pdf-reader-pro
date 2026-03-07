@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Search, Settings, PanelLeft, Maximize2, Minimize2,
-  ZoomIn, ZoomOut, ChevronLeft, BookOpen, Bookmark,
+  ZoomIn, ZoomOut, ChevronLeft, Bookmark,
   Moon, Sun, Monitor, Printer, Download, ChevronDown,
   Maximize,
 } from 'lucide-react';
+import { AppIcon } from '@/components/common/AppIcon';
 import { IconButton } from '@/components/common/IconButton';
 import { useUIStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -242,9 +243,7 @@ export function Header() {
 
         {!isReader && (
           <div className="flex items-center gap-2.5 pl-1">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-glow">
-              <BookOpen size={14} className="text-white" />
-            </div>
+            <AppIcon className="w-7 h-7 shrink-0" decorative />
             <h1 className="text-sm font-bold tracking-tight">
               <span className="text-on-surface">PDF Reader</span>
               <span className="text-brand-400 ml-0.5">Pro</span>

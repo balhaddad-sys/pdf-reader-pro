@@ -1,5 +1,6 @@
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string || '';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string || '';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-sonnet-4-6';
 
 const MAX_RETRIES = 4;
 
@@ -12,12 +13,22 @@ const SYSTEM_PROMPT = [
   'If the user\'s message references previous conversation, use the chat history to understand context.',
 ].join(' ');
 
-async function callGemini(body: string): Promise<string> {
+async function callClaude(messages: { role: string; content: unknown }[]): Promise<string> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(ANTHROPIC_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 2048,
+        system: SYSTEM_PROMPT,
+        messages,
+      }),
     });
 
     if (response.status === 429) {
@@ -28,72 +39,65 @@ async function callGemini(body: string): Promise<string> {
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`Gemini API error ${response.status}: ${err}`);
+      throw new Error(`Claude API error ${response.status}: ${err}`);
     }
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response from Gemini.';
+    return data.content?.[0]?.text ?? 'No response from Claude.';
   }
 
   return 'Rate limited. Please wait a moment and try again.';
 }
 
 /** Text-based: send extracted page text */
-export async function askGemini(pageText: string, question: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    return 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your .env file.';
+export async function askClaude(pageText: string, question: string): Promise<string> {
+  if (!ANTHROPIC_API_KEY) {
+    return 'Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your .env file.';
   }
 
   const trimmedText = pageText.slice(0, 8000);
 
-  const body = JSON.stringify({
-    contents: [{
-      parts: [{
-        text: [
-          SYSTEM_PROMPT,
-          '',
-          '--- PAGE CONTENT ---',
-          trimmedText,
-          '--- END PAGE CONTENT ---',
-          '',
-          question,
-        ].join('\n'),
-      }],
-    }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
-  });
+  const messages = [{
+    role: 'user',
+    content: [
+      '--- PAGE CONTENT ---',
+      trimmedText,
+      '--- END PAGE CONTENT ---',
+      '',
+      question,
+    ].join('\n'),
+  }];
 
-  return callGemini(body);
+  return callClaude(messages);
 }
 
 /** Vision-based: send page screenshots when no text layer exists */
-export async function askGeminiVision(imageDataUrls: string[], question: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    return 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your .env file.';
+export async function askClaudeVision(imageDataUrls: string[], question: string): Promise<string> {
+  if (!ANTHROPIC_API_KEY) {
+    return 'Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your .env file.';
   }
 
-  const parts: Record<string, unknown>[] = [
-    { text: SYSTEM_PROMPT + '\n\nThe user is viewing a PDF. Below are screenshots of the pages. Read the text from the images and answer the question.' },
+  const content: Record<string, unknown>[] = [
+    { type: 'text', text: 'The user is viewing a PDF. Below are screenshots of the pages. Read the text from the images and answer the question.' },
   ];
 
   for (const dataUrl of imageDataUrls) {
     const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
     if (match) {
-      parts.push({
-        inline_data: {
-          mime_type: match[1],
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: match[1],
           data: match[2],
         },
       });
     }
   }
 
-  parts.push({ text: question });
+  content.push({ type: 'text', text: question });
 
-  const body = JSON.stringify({
-    contents: [{ parts }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
-  });
+  const messages = [{ role: 'user', content }];
 
-  return callGemini(body);
+  return callClaude(messages);
 }

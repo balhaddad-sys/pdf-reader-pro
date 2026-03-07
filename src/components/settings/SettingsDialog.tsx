@@ -1,4 +1,5 @@
 import { Moon, Sun, Sunset, Monitor, Keyboard } from 'lucide-react';
+import { AppIcon } from '@/components/common/AppIcon';
 import { Modal } from '@/components/common/Modal';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/utils/helpers';
@@ -72,9 +73,7 @@ export function SettingsDialog() {
         <h3 className="text-sm font-semibold text-on-surface mb-3">About</h3>
         <div className="bg-surface-3 rounded-xl p-4">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-glow">
-              <span className="text-white font-bold text-sm">P</span>
-            </div>
+            <AppIcon className="w-10 h-10 shrink-0" decorative />
             <div>
               <p className="text-sm font-semibold text-on-surface">PDF Reader Pro</p>
               <p className="text-2xs text-on-surface-secondary">Version 2.0.0</p>

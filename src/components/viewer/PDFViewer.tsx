@@ -86,6 +86,8 @@ interface VirtualPageProps {
   width: number;
   height: number;
   top: number;
+  /** When true, show a lightweight placeholder instead of rendering */
+  defer: boolean;
 }
 
 const VirtualPage = memo(function VirtualPage({
@@ -96,6 +98,7 @@ const VirtualPage = memo(function VirtualPage({
   width,
   height,
   top,
+  defer,
 }: VirtualPageProps): React.JSX.Element {
   return (
     <div
@@ -108,8 +111,16 @@ const VirtualPage = memo(function VirtualPage({
         transform: 'translateX(-50%)',
       }}
     >
-      <PageRenderer pdf={pdf} pageNumber={pageNumber} zoom={zoom} />
-      {isDrawingMode && <DrawingCanvas pageNumber={pageNumber} zoom={zoom} />}
+      {defer ? (
+        <div className="flex items-center justify-center w-full h-full text-on-surface-secondary/30 text-sm select-none">
+          {pageNumber}
+        </div>
+      ) : (
+        <>
+          <PageRenderer pdf={pdf} pageNumber={pageNumber} zoom={zoom} />
+          {isDrawingMode && <DrawingCanvas pageNumber={pageNumber} zoom={zoom} />}
+        </>
+      )}
     </div>
   );
 });
@@ -122,6 +133,10 @@ export function PDFViewer() {
   const scrollRoot = useRef<HTMLDivElement | null>(null);
   const rafId = useRef(0);
   const lastPageRef = useRef(0);
+  const lastScrollTop = useRef(0);
+  const lastScrollTime = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [fastScrolling, setFastScrolling] = useState(false);
 
   const tabs = useDocumentStore(s => s.tabs);
   const activeTabId = useDocumentStore(s => s.activeTabId);
@@ -221,10 +236,36 @@ export function PDFViewer() {
     }
   }, [layout, updateTab, numPages]);
 
-  // ── Scroll handler (rAF-throttled — runs at most once per frame) ───────
+  // ── Scroll handler with velocity detection ─────────────────────────────
+  // During fast scrollbar drags, skip rendering and show placeholders.
+  // Only render once scrolling settles (150ms of no scroll events).
+  const FAST_THRESHOLD = 3000; // px/sec — above this = fast scrolling
+
   const handleScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const now = performance.now();
+    const dt = now - lastScrollTime.current;
+    const dy = Math.abs(container.scrollTop - lastScrollTop.current);
+    lastScrollTop.current = container.scrollTop;
+    lastScrollTime.current = now;
+
+    // Detect fast scroll (scrollbar drag or flick)
+    const velocity = dt > 0 ? (dy / dt) * 1000 : 0;
+    if (velocity > FAST_THRESHOLD) {
+      setFastScrolling(true);
+    }
+
+    // Always update visible range (lightweight — just math, no rendering)
     cancelAnimationFrame(rafId.current);
     rafId.current = requestAnimationFrame(recalcVisible);
+
+    // Schedule settle: after 150ms of no scroll, enable rendering
+    clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      setFastScrolling(false);
+    }, 150);
   }, [recalcVisible]);
 
   // Recalculate on mount and when layout changes
@@ -441,6 +482,7 @@ export function PDFViewer() {
                 width={hasLayout ? layout.widths[idx] : DEFAULT_W}
                 height={hasLayout ? layout.heights[idx] : DEFAULT_H}
                 top={hasLayout ? layout.offsets[idx] : PAGE_PADDING + idx * (DEFAULT_H + PAGE_GAP)}
+                defer={fastScrolling}
               />
             );
           })}

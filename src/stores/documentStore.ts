@@ -3,6 +3,7 @@ import type { PDFDocument, TabInfo, LibrarySort, LibraryLayout } from '@/types';
 import * as db from '@/utils/db';
 import { generateId } from '@/utils/helpers';
 import { loadPDF, renderPageThumbnail } from '@/utils/pdf';
+import { indexDocument } from '@/utils/textIndex';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
 interface DocumentState {
@@ -99,6 +100,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       documents: [doc, ...state.documents],
     }));
 
+    // Start background OCR/text indexing immediately at upload time
+    // Fire-and-forget — runs in background, results cached in IndexedDB
+    indexDocument(pdf, id).catch(() => {});
+
     return id;
   },
 
@@ -187,6 +192,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       page: doc.lastPage || 1,
       zoom: initialZoom,
     };
+
+    // Ensure text index exists (loads from IndexedDB cache or starts OCR)
+    indexDocument(pdfInstances.get(id)!, id).catch(() => {});
 
     set(state => ({
       tabs: [...state.tabs, tab],

@@ -3,6 +3,7 @@ import { renderPage, paintFromCache } from '@/utils/pdf';
 import { useUIStore } from '@/stores/uiStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useDocumentStore } from '@/stores/documentStore';
+import { useSearchStore } from '@/stores/searchStore';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
 interface PageRendererProps {
@@ -16,6 +17,9 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   const textLayerRef = useRef<HTMLDivElement>(null);
   const annotLayerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
+  /** Store text items + their strings for search highlighting */
+  const textItemsRef = useRef<TextItem[]>([]);
+  const textStringsRef = useRef<string[]>([]);
 
   const activeTool = useUIStore(s => s.activeTool);
   const activeColor = useUIStore(s => s.activeColor);
@@ -25,6 +29,11 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   const activeTabId = useDocumentStore(s => s.activeTabId);
   const activeTab = tabs.find(t => t.id === activeTabId);
 
+  // Search state
+  const matches = useSearchStore(s => s.matches);
+  const currentMatchIndex = useSearchStore(s => s.currentMatchIndex);
+  const scrollTrigger = useSearchStore(s => s.scrollTrigger);
+
   // ── Render PDF canvas + text layer ───────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,13 +42,12 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     // Try cache first — instant paint, no async work needed
     if (paintFromCache(canvas, pageNumber, zoom)) {
       setLoading(false);
-      // Still need the text layer — build it in background
       let cancelled = false;
       pdf.getPage(pageNumber).then(page => {
         if (cancelled || !textLayerRef.current) return;
         return page.getTextContent().then(textContent => {
           if (cancelled || !textLayerRef.current) return;
-          buildTextLayer(textLayerRef.current, textContent, zoom);
+          buildTextLayer(textLayerRef.current, textContent, zoom, textItemsRef, textStringsRef);
         });
       });
       return () => { cancelled = true; };
@@ -61,7 +69,7 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         if (textLayerRef.current) {
           const textContent = await page.getTextContent();
           if (cancelled) return;
-          buildTextLayer(textLayerRef.current, textContent, zoom);
+          buildTextLayer(textLayerRef.current, textContent, zoom, textItemsRef, textStringsRef);
         }
       } catch (err) {
         if (!cancelled) {
@@ -74,6 +82,78 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     doRender();
     return () => { cancelled = true; };
   }, [pdf, pageNumber, zoom]);
+
+  // ── Search highlighting ────────────────────────────────────────────────────
+  useEffect(() => {
+    const textLayer = textLayerRef.current;
+    if (!textLayer) return;
+
+    const pageMatches = matches.filter(m => m.page === pageNumber);
+    const currentMatch = matches[currentMatchIndex];
+    const isCurrentPage = currentMatch?.page === pageNumber;
+
+    // Clear previous highlights
+    textLayer.querySelectorAll('.search-highlight').forEach(el => {
+      const parent = el.parentNode;
+      if (!parent) return;
+      // Restore original text
+      const text = el.textContent || '';
+      parent.replaceChild(document.createTextNode(text), el);
+      parent.normalize(); // merge adjacent text nodes
+    });
+
+    if (pageMatches.length === 0) return;
+
+    // Get all text spans in the layer
+    const spans = Array.from(textLayer.querySelectorAll('span'));
+    if (spans.length === 0) return;
+
+    // Build concatenated text and mapping: charIndex → { spanIdx, offsetInSpan }
+    const textStrings = textStringsRef.current;
+    if (textStrings.length === 0) return;
+
+    let totalLen = 0;
+    const spanStarts: number[] = []; // start char index of each span in concat text
+    for (let i = 0; i < textStrings.length; i++) {
+      spanStarts.push(totalLen);
+      totalLen += textStrings[i].length;
+      // Account for the space added between items by getPageText
+      if (i < textStrings.length - 1) totalLen += 1; // the space separator
+    }
+
+    // For each match on this page, find which spans to highlight
+    for (const match of pageMatches) {
+      const isCurrent = isCurrentPage && match === currentMatch;
+      const matchStart = match.charOffset;
+      const matchEnd = matchStart + match.charLength;
+
+      // Find which spans are affected
+      for (let si = 0; si < spans.length; si++) {
+        const spanStart = spanStarts[si];
+        if (spanStart === undefined) continue;
+        const spanText = textStrings[si] || '';
+        const spanEnd = spanStart + spanText.length;
+
+        // Check overlap
+        if (matchEnd <= spanStart || matchStart >= spanEnd) continue;
+
+        // Calculate overlap within this span
+        const hlStart = Math.max(0, matchStart - spanStart);
+        const hlEnd = Math.min(spanText.length, matchEnd - spanStart);
+
+        const span = spans[si];
+        highlightSpan(span, spanText, hlStart, hlEnd, isCurrent);
+      }
+    }
+
+    // Scroll to the current match
+    if (isCurrentPage && scrollTrigger > 0) {
+      const selected = textLayer.querySelector('.search-highlight-current');
+      if (selected) {
+        selected.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+  }, [matches, currentMatchIndex, scrollTrigger, pageNumber]);
 
   // ── Annotation overlays ──────────────────────────────────────────────────
   useEffect(() => {
@@ -195,7 +275,7 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   );
 });
 
-// ── Helper ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 interface TextItem {
   str: string;
@@ -206,11 +286,18 @@ function buildTextLayer(
   container: HTMLDivElement,
   textContent: { items: unknown[] },
   zoom: number,
+  textItemsRef: React.MutableRefObject<TextItem[]>,
+  textStringsRef: React.MutableRefObject<string[]>,
 ) {
+  const items: TextItem[] = [];
+  const strings: string[] = [];
   const frag = document.createDocumentFragment();
+
   textContent.items.forEach(item => {
     const ti = item as TextItem;
     if (!ti.str) return;
+    items.push(ti);
+    strings.push(ti.str);
     const tx = ti.transform;
     const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
     const span = document.createElement('span');
@@ -218,6 +305,51 @@ function buildTextLayer(
     span.style.cssText = `position:absolute;left:${tx[4] * zoom}px;bottom:${tx[5] * zoom}px;font-size:${fontSize * zoom}px;font-family:sans-serif;color:transparent;white-space:pre;transform-origin:0% 0%`;
     frag.appendChild(span);
   });
+
   container.innerHTML = '';
   container.appendChild(frag);
+
+  textItemsRef.current = items;
+  textStringsRef.current = strings;
+}
+
+/**
+ * Highlight a portion of a text span by splitting it into text nodes
+ * and wrapping the highlighted part in a <mark> element.
+ */
+function highlightSpan(
+  span: Element,
+  fullText: string,
+  hlStart: number,
+  hlEnd: number,
+  isCurrent: boolean,
+) {
+  // Get the current text content (may already have some highlights)
+  const existingText = span.textContent || '';
+  if (!existingText) return;
+
+  // We need to work with the original span text.
+  // Re-map hlStart/hlEnd if span text differs from fullText (shouldn't happen)
+  const text = fullText.length === existingText.length ? fullText : existingText;
+
+  // Clear the span
+  span.textContent = '';
+
+  // Before highlight
+  if (hlStart > 0) {
+    span.appendChild(document.createTextNode(text.slice(0, hlStart)));
+  }
+
+  // Highlighted part
+  const mark = document.createElement('mark');
+  mark.className = isCurrent
+    ? 'search-highlight search-highlight-current'
+    : 'search-highlight';
+  mark.textContent = text.slice(hlStart, hlEnd);
+  span.appendChild(mark);
+
+  // After highlight
+  if (hlEnd < text.length) {
+    span.appendChild(document.createTextNode(text.slice(hlEnd)));
+  }
 }

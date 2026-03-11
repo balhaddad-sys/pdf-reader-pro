@@ -11,6 +11,7 @@ import { StampPicker } from '@/components/annotations/StampPicker';
 import { AIDrawer } from './AIDrawer';
 import { Sparkles } from 'lucide-react';
 import { cn, clamp } from '@/utils/helpers';
+import { cancelIndexing } from '@/utils/textIndex';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -135,7 +136,7 @@ export function PDFViewer() {
   const lastPageRef = useRef(0);
   const lastScrollTop = useRef(0);
   const lastScrollTime = useRef(0);
-  const settleTimer = useRef<ReturnType<typeof setTimeout>>();
+  const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [fastScrolling, setFastScrolling] = useState(false);
 
   const tabs = useDocumentStore(s => s.tabs);
@@ -278,6 +279,13 @@ export function PDFViewer() {
       loadBookmarks(activeTab.documentId);
     }
   }, [activeTab?.documentId, loadAnnotations, loadBookmarks]);
+
+  // Text indexing is now triggered at import/open time in documentStore.
+  // Cancel on unmount to avoid wasted work.
+  useEffect(() => {
+    if (!activeTab) return;
+    return () => { cancelIndexing(activeTab.documentId); };
+  }, [activeTab?.documentId]);
 
   // ── Scroll to page when page changes from external source (sidebar) ────
   const scrollingToPage = useRef(false);

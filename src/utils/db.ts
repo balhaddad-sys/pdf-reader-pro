@@ -1,7 +1,7 @@
 import type { PDFDocument, Annotation, Bookmark } from '@/types';
 
 const DB_NAME = 'pdf-reader-pro';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   documents: 'documents',
@@ -37,6 +37,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.thumbnails)) {
         db.createObjectStore(STORES.thumbnails);
+      }
+      if (!db.objectStoreNames.contains('ocrtext')) {
+        db.createObjectStore('ocrtext');
       }
     };
 
@@ -83,12 +86,13 @@ export async function saveDocument(doc: PDFDocument): Promise<void> {
 export async function deleteDocument(id: string): Promise<void> {
   const db = await openDB();
   const transaction = db.transaction(
-    [STORES.documents, STORES.files, STORES.annotations, STORES.bookmarks, STORES.thumbnails],
+    [STORES.documents, STORES.files, STORES.annotations, STORES.bookmarks, STORES.thumbnails, 'ocrtext'],
     'readwrite'
   );
   transaction.objectStore(STORES.documents).delete(id);
   transaction.objectStore(STORES.files).delete(id);
   transaction.objectStore(STORES.thumbnails).delete(id);
+  transaction.objectStore('ocrtext').delete(id);
 
   // Delete annotations and bookmarks by index
   const annStore = transaction.objectStore(STORES.annotations);
@@ -178,4 +182,15 @@ export async function saveThumbnail(documentId: string, dataUrl: string): Promis
 export async function getThumbnail(documentId: string): Promise<string | undefined> {
   const store = await tx(STORES.thumbnails);
   return promisify(store.get(documentId));
+}
+
+// OCR text operations — persists extracted text so OCR only runs once per document
+export async function saveOcrText(docId: string, pageTexts: Record<number, string>): Promise<void> {
+  const store = await tx('ocrtext', 'readwrite');
+  await promisify(store.put(pageTexts, docId));
+}
+
+export async function getOcrText(docId: string): Promise<Record<number, string> | undefined> {
+  const store = await tx('ocrtext');
+  return promisify(store.get(docId));
 }

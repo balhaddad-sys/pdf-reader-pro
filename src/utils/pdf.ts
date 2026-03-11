@@ -11,6 +11,7 @@ export async function loadPDF(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentPr
     data: new Uint8Array(data),
     cMapUrl: 'cmaps/',
     cMapPacked: true,
+    standardFontDataUrl: 'standard_fonts/',
     enableXfa: true,
   });
   return loadingTask.promise;

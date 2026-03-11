@@ -97,6 +97,10 @@ export default defineConfig({
           src: 'node_modules/pdfjs-dist/cmaps/*',
           dest: 'cmaps',
         },
+        {
+          src: 'node_modules/pdfjs-dist/standard_fonts/*',
+          dest: 'standard_fonts',
+        },
       ],
     }),
 

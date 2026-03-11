@@ -7,15 +7,19 @@ import { cn } from '@/utils/helpers';
 import type { SearchResult } from '@/types';
 
 /**
- * Normalize text for search: strip Arabic diacritics (harakat/tashkeel),
- * normalize Unicode (NFKD), and lowercase.
+ * Normalize text for search across all languages:
+ * 1. NFKD decomposition (splits base char + combining marks)
+ * 2. Strip ALL Unicode combining marks (\p{M}) — covers Latin accents
+ *    (é→e, ü→u, ñ→n), Arabic diacritics (harakat), Hebrew niqqud,
+ *    Devanagari matras, Thai tone marks, Vietnamese diacritics, etc.
+ * 3. Strip Arabic Tatweel (kashida, U+0640)
+ * 4. Lowercase
  */
 function normalizeForSearch(text: string): string {
   return text
     .normalize('NFKD')
-    // Strip Arabic diacritics: Fathah, Dammah, Kasrah, Shadda, Sukun,
-    // Fathatan, Dammatan, Kasratan, superscript Alef, Quranic marks, Tatweel
-    .replace(/[\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u0640]/g, '')
+    .replace(/\p{M}/gu, '')   // all combining marks (accents, diacritics, etc.)
+    .replace(/\u0640/g, '')    // Arabic Tatweel / kashida
     .toLowerCase();
 }
 

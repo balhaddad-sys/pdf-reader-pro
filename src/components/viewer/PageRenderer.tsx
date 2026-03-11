@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
-import { renderPage } from '@/utils/pdf';
+import { renderPage, paintFromCache } from '@/utils/pdf';
 import { useUIStore } from '@/stores/uiStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -15,8 +15,7 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const annotLayerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
-  const renderTaskRef = useRef<{ cancel: boolean }>({ cancel: false });
+  const [loading, setLoading] = useState(true);
 
   const activeTool = useUIStore(s => s.activeTool);
   const activeColor = useUIStore(s => s.activeColor);
@@ -26,54 +25,47 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
   const activeTabId = useDocumentStore(s => s.activeTabId);
   const activeTab = tabs.find(t => t.id === activeTabId);
 
-  // ── Render PDF canvas + text layer ────────────────────────────────────────
+  // ── Render PDF canvas + text layer ───────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    renderTaskRef.current.cancel = true;
-    const currentTask = { cancel: false };
-    renderTaskRef.current = currentTask;
+    // Try cache first — instant paint, no async work needed
+    if (paintFromCache(canvas, pageNumber, zoom)) {
+      setLoading(false);
+      // Still need the text layer — build it in background
+      let cancelled = false;
+      pdf.getPage(pageNumber).then(page => {
+        if (cancelled || !textLayerRef.current) return;
+        return page.getTextContent().then(textContent => {
+          if (cancelled || !textLayerRef.current) return;
+          buildTextLayer(textLayerRef.current, textContent, zoom);
+        });
+      });
+      return () => { cancelled = true; };
+    }
 
+    // Cache miss — full render
     let cancelled = false;
+    setLoading(true);
 
     const doRender = async () => {
       try {
         const page = await pdf.getPage(pageNumber);
-        if (cancelled || currentTask.cancel) return;
-
-        const viewport = page.getViewport({ scale: zoom });
-        setDimensions({ width: viewport.width, height: viewport.height });
+        if (cancelled) return;
 
         await renderPage(page, canvas, zoom);
-        if (cancelled || currentTask.cancel) return;
+        if (cancelled) return;
+        setLoading(false);
 
         if (textLayerRef.current) {
           const textContent = await page.getTextContent();
-          if (cancelled || currentTask.cancel) return;
-
-          const textLayer = textLayerRef.current;
-          textLayer.innerHTML = '';
-
-          textContent.items.forEach(item => {
-            if (!('str' in item) || !item.str) return;
-            const tx = item.transform;
-            const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-            const span = document.createElement('span');
-            span.textContent = item.str;
-            span.style.position = 'absolute';
-            span.style.left = `${tx[4] * zoom}px`;
-            span.style.bottom = `${tx[5] * zoom}px`;
-            span.style.fontSize = `${fontSize * zoom}px`;
-            span.style.fontFamily = 'sans-serif';
-            span.style.color = 'transparent';
-            span.style.whiteSpace = 'pre';
-            span.style.transformOrigin = '0% 0%';
-            textLayer.appendChild(span);
-          });
+          if (cancelled) return;
+          buildTextLayer(textLayerRef.current, textContent, zoom);
         }
       } catch (err) {
-        if (!cancelled && !currentTask.cancel) {
+        if (!cancelled) {
+          if (err instanceof Error && err.message.includes('Rendering cancelled')) return;
           console.error(`Error rendering page ${pageNumber}:`, err);
         }
       }
@@ -83,19 +75,16 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     return () => { cancelled = true; };
   }, [pdf, pageNumber, zoom]);
 
-  // ── Render text-based annotation overlays ─────────────────────────────────
-  // Rects are stored normalised (÷zoom at creation time) so they must be
-  // scaled back (×zoom) here.  Adding zoom to deps ensures overlays reposition
-  // whenever the user zooms in or out.
+  // ── Annotation overlays ──────────────────────────────────────────────────
   useEffect(() => {
     const layer = annotLayerRef.current;
     if (!layer) return;
-    layer.innerHTML = '';
 
     const pageAnnotations = annotations.filter(
       a => a.page === pageNumber && a.rects && a.rects.length > 0,
     );
 
+    const frag = document.createDocumentFragment();
     pageAnnotations.forEach(ann => {
       ann.rects!.forEach(rect => {
         const el = document.createElement('div');
@@ -113,7 +102,6 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
         } else if (ann.type === 'underline') {
           el.style.borderBottom = `2px solid ${ann.color}`;
         } else if (ann.type === 'strikethrough') {
-          // Centre a 2 px line through the rect (override top after scaling)
           el.style.top = `${(rect.y + rect.height / 2) * zoom - 1}px`;
           el.style.height = '2px';
           el.style.backgroundColor = ann.color;
@@ -128,12 +116,15 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
           el.style.borderBottom = `1.5px dashed ${ann.color}`;
         }
 
-        layer.appendChild(el);
+        frag.appendChild(el);
       });
     });
-  }, [annotations, pageNumber, zoom]); // zoom added — overlays rescale on every zoom change
 
-  // ── Text selection → annotation creation ──────────────────────────────────
+    layer.innerHTML = '';
+    layer.appendChild(frag);
+  }, [annotations, pageNumber, zoom]);
+
+  // ── Text selection → annotation ──────────────────────────────────────────
   const handleTextSelection = useCallback(() => {
     if (!activeTab) return;
 
@@ -156,8 +147,6 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
 
     Array.from(range.getClientRects()).forEach(r => {
       if (r.width > 0 && r.height > 0) {
-        // Normalise to PDF units (÷zoom) so the overlay layer can re-scale
-        // correctly at any future zoom level by multiplying back by zoom.
         rects.push(new DOMRect(
           (r.left - layerRect.left) / zoom,
           (r.top  - layerRect.top)  / zoom,
@@ -179,28 +168,23 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     });
 
     selection.removeAllRanges();
-  }, [activeTool, activeColor, activeTab, pageNumber, addAnnotation]);
+  }, [activeTool, activeColor, activeTab, pageNumber, addAnnotation, zoom]);
 
   return (
-    <div
-      className="relative"
-      style={{
-        width: dimensions ? `${dimensions.width}px` : 'auto',
-        height: dimensions ? `${dimensions.height}px` : 'auto',
-        minWidth: '200px',
-        minHeight: '280px',
-      }}
-    >
-      {/* PDF canvas */}
+    <div className="relative w-full h-full">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+          <div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spinner" />
+        </div>
+      )}
+
       <canvas ref={canvasRef} className="block" />
 
-      {/* Annotation visual overlay (highlight, underline, strikethrough, squiggly) */}
       <div
         ref={annotLayerRef}
         className="absolute inset-0 overflow-hidden pointer-events-none"
       />
 
-      {/* Text selection layer */}
       <div
         ref={textLayerRef}
         className="absolute inset-0 overflow-hidden leading-none select-text"
@@ -210,3 +194,30 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
     </div>
   );
 });
+
+// ── Helper ──────────────────────────────────────────────────────────────────
+
+interface TextItem {
+  str: string;
+  transform: number[];
+}
+
+function buildTextLayer(
+  container: HTMLDivElement,
+  textContent: { items: unknown[] },
+  zoom: number,
+) {
+  const frag = document.createDocumentFragment();
+  textContent.items.forEach(item => {
+    const ti = item as TextItem;
+    if (!ti.str) return;
+    const tx = ti.transform;
+    const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+    const span = document.createElement('span');
+    span.textContent = ti.str;
+    span.style.cssText = `position:absolute;left:${tx[4] * zoom}px;bottom:${tx[5] * zoom}px;font-size:${fontSize * zoom}px;font-family:sans-serif;color:transparent;white-space:pre;transform-origin:0% 0%`;
+    frag.appendChild(span);
+  });
+  container.innerHTML = '';
+  container.appendChild(frag);
+}

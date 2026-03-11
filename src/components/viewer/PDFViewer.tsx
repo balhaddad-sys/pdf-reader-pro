@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, memo } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -10,24 +10,82 @@ import { SignatureDialog } from '@/components/annotations/SignatureDialog';
 import { StampPicker } from '@/components/annotations/StampPicker';
 import { AIDrawer } from './AIDrawer';
 import { Sparkles } from 'lucide-react';
-import { cn, debounce, clamp } from '@/utils/helpers';
+import { cn, clamp } from '@/utils/helpers';
 import type { PDFDocumentProxy } from '@/utils/pdf';
 
-// ─── Virtual Page ─────────────────────────────────────────────────────────────
-// Lazy-renders the PDF page only when near the scroll container's visible area.
-// The scroll container (not the window) is passed as the IntersectionObserver
-// root so that overflow-clipped pages are detected correctly.
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+/** Gap between pages in px */
+const PAGE_GAP = 16;
+const PAGE_GAP_FOCUS = 8;
+/** Vertical padding above/below all pages */
+const PAGE_PADDING = 24;
+const PAGE_PADDING_FOCUS = 8;
+/** How many pages to render beyond the visible viewport in each direction */
+const OVERSCAN = 4;
+/** Default page dimensions before real dimensions are loaded */
+const DEFAULT_W = 595;
+const DEFAULT_H = 842;
+
+// ─── Layout helpers ──────────────────────────────────────────────────────────
+
+interface PageLayout {
+  /** Top offset of each page (index = pageNum-1) */
+  offsets: number[];
+  /** Height of each page */
+  heights: number[];
+  /** Width of each page */
+  widths: number[];
+  /** Total scrollable height */
+  totalHeight: number;
+}
+
+function computeLayout(
+  numPages: number,
+  dims: Map<number, { width: number; height: number }>,
+  gap: number,
+  padding: number,
+): PageLayout {
+  const offsets: number[] = [];
+  const heights: number[] = [];
+  const widths: number[] = [];
+  let y = padding;
+
+  for (let i = 1; i <= numPages; i++) {
+    const d = dims.get(i);
+    const w = d ? d.width : DEFAULT_W;
+    const h = d ? d.height : DEFAULT_H;
+    offsets.push(y);
+    heights.push(h);
+    widths.push(w);
+    y += h + gap;
+  }
+
+  return { offsets, heights, widths, totalHeight: y - gap + padding };
+}
+
+/** Binary search: find the first page whose bottom edge is >= scrollTop */
+function findFirstVisible(offsets: number[], heights: number[], scrollTop: number): number {
+  let lo = 0;
+  let hi = offsets.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (offsets[mid] + heights[mid] < scrollTop) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+// ─── VirtualPage ─────────────────────────────────────────────────────────────
 
 interface VirtualPageProps {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   zoom: number;
   isDrawingMode: boolean;
-  pageDimensions: Map<number, { width: number; height: number }>;
-  /** The scroll container — required for correct IntersectionObserver root */
-  scrollRoot: HTMLDivElement | null;
-  /** Seed the first N pages as visible without waiting for the observer */
-  initialVisible: boolean;
+  width: number;
+  height: number;
+  top: number;
 }
 
 const VirtualPage = memo(function VirtualPage({
@@ -35,67 +93,35 @@ const VirtualPage = memo(function VirtualPage({
   pageNumber,
   zoom,
   isDrawingMode,
-  pageDimensions,
-  scrollRoot,
-  initialVisible,
-}: VirtualPageProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  // Start visible for the first pages so the document is never blank on open
-  const [shouldRender, setShouldRender] = useState(initialVisible);
-
-  useEffect(() => {
-    if (shouldRender) return; // already rendered — no need to observe
-    const el = wrapperRef.current;
-    if (!el || !scrollRoot) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setShouldRender(true);
-        // Never unrender once visible — avoids blank flash on scroll-back
-      },
-      // Use the scroll container as root so rootMargin works relative to it
-      { root: scrollRoot, rootMargin: '400px 0px', threshold: 0 },
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [scrollRoot, shouldRender]);
-
-  const dims = pageDimensions.get(pageNumber);
-  const w = dims ? `${dims.width}px` : '595px';
-  const h = dims ? `${dims.height}px` : '842px';
-
+  width,
+  height,
+  top,
+}: VirtualPageProps): React.JSX.Element {
   return (
     <div
       data-page-number={pageNumber}
-      ref={wrapperRef}
-      className="relative shadow-elevation-2 bg-white"
-      style={{ width: w, height: h }}
+      className="absolute left-1/2 shadow-elevation-2 bg-white"
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        top: `${top}px`,
+        transform: 'translateX(-50%)',
+      }}
     >
-      {shouldRender ? (
-        <>
-          <PageRenderer pdf={pdf} pageNumber={pageNumber} zoom={zoom} />
-          {isDrawingMode && (
-            <DrawingCanvas pageNumber={pageNumber} zoom={zoom} />
-          )}
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-white" />
-      )}
+      <PageRenderer pdf={pdf} pageNumber={pageNumber} zoom={zoom} />
+      {isDrawingMode && <DrawingCanvas pageNumber={pageNumber} zoom={zoom} />}
     </div>
   );
 });
 
-// ─── Main PDFViewer ───────────────────────────────────────────────────────────
-
-// How many pages to pre-render immediately on open (before IntersectionObserver kicks in)
-const INITIAL_PAGES = 5;
+// ─── Main PDFViewer ──────────────────────────────────────────────────────────
 
 export function PDFViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const pagesContainerRef = useRef<HTMLDivElement | null>(null);
-  // Keep a state copy of the container so VirtualPage gets it after mount
-  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
+  const scrollRoot = useRef<HTMLDivElement | null>(null);
+  const rafId = useRef(0);
+  const lastPageRef = useRef(0);
 
   const tabs = useDocumentStore(s => s.tabs);
   const activeTabId = useDocumentStore(s => s.activeTabId);
@@ -112,25 +138,16 @@ export function PDFViewer() {
   const activeTab = tabs.find(t => t.id === activeTabId);
   const pdf = activeTab ? getPdfInstance(activeTab.documentId) : null;
 
-  // Stable ref so touch handlers always see the latest tab without re-adding listeners
   const activeTabRef = useRef(activeTab);
   useEffect(() => { activeTabRef.current = activeTab; });
 
-  // Callback ref: captures the container element the moment it mounts
-  // so IntersectionObserver can use it as root immediately
-  const containerRefCallback = useCallback((el: HTMLDivElement | null) => {
-    containerRef.current = el;
-    setScrollRoot(el);
-  }, []);
-
-  // Pre-calculate all page dimensions (lightweight — just viewport geometry, no rendering)
+  // ── Page dimensions ──────────────────────────────────────────────────────
   const [pageDimensions, setPageDimensions] = useState<Map<number, { width: number; height: number }>>(new Map());
 
   useEffect(() => {
     if (!pdf || !activeTab) return;
     let cancelled = false;
 
-    // Load first page synchronously then rest progressively
     const loadDimensions = async () => {
       const dims = new Map<number, { width: number; height: number }>();
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -139,10 +156,8 @@ export function PDFViewer() {
           const page = await pdf.getPage(i);
           const vp = page.getViewport({ scale: activeTab.zoom });
           dims.set(i, { width: vp.width, height: vp.height });
-          // Update state every 10 pages so placeholders resize progressively
-          if (i % 10 === 0 && !cancelled) {
-            setPageDimensions(new Map(dims));
-          }
+          // Flush early: after page 1, then every 10 pages
+          if ((i === 1 || i % 10 === 0) && !cancelled) setPageDimensions(new Map(dims));
         } catch { /* ignore */ }
       }
       if (!cancelled) setPageDimensions(new Map(dims));
@@ -152,7 +167,70 @@ export function PDFViewer() {
     return () => { cancelled = true; };
   }, [pdf, activeTab?.documentId, activeTab?.zoom]);
 
-  // Load annotations when document changes
+  // ── Computed layout (O(n) but only recalculated when dims/zoom change) ──
+  const gap = focusMode ? PAGE_GAP_FOCUS : PAGE_GAP;
+  const padding = focusMode ? PAGE_PADDING_FOCUS : PAGE_PADDING;
+  const numPages = pdf?.numPages ?? 0;
+
+  const layout = useMemo(
+    () => computeLayout(numPages, pageDimensions, gap, padding),
+    [numPages, pageDimensions, gap, padding],
+  );
+
+  // ── Visible window (which pages to mount) ──────────────────────────────
+  const [visibleRange, setVisibleRange] = useState<[number, number]>([0, Math.min(5, Math.max(numPages - 1, 0))]);
+
+  const recalcVisible = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // If layout isn't ready yet (dimensions still loading), show first few pages
+    if (layout.offsets.length === 0) {
+      if (numPages > 0) {
+        setVisibleRange([0, Math.min(OVERSCAN, numPages - 1)]);
+      }
+      return;
+    }
+
+    const scrollTop = container.scrollTop;
+    const viewH = container.clientHeight;
+
+    const first = findFirstVisible(layout.offsets, layout.heights, scrollTop);
+    let last = first;
+    while (last < layout.offsets.length - 1 && layout.offsets[last + 1] < scrollTop + viewH) {
+      last++;
+    }
+
+    const rangeStart = Math.max(0, first - OVERSCAN);
+    const rangeEnd = Math.min(layout.offsets.length - 1, last + OVERSCAN);
+    setVisibleRange(prev => (prev[0] === rangeStart && prev[1] === rangeEnd) ? prev : [rangeStart, rangeEnd]);
+
+    // Update current page indicator (the page at 1/3 from top)
+    const midPoint = scrollTop + viewH / 3;
+    let currentPage = 1;
+    for (let i = 0; i < layout.offsets.length; i++) {
+      if (layout.offsets[i] <= midPoint) currentPage = i + 1;
+      else break;
+    }
+    if (currentPage !== lastPageRef.current) {
+      lastPageRef.current = currentPage;
+      const tab = activeTabRef.current;
+      if (tab && currentPage !== tab.page) {
+        updateTab(tab.id, { page: currentPage });
+      }
+    }
+  }, [layout, updateTab, numPages]);
+
+  // ── Scroll handler (rAF-throttled — runs at most once per frame) ───────
+  const handleScroll = useCallback(() => {
+    cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(recalcVisible);
+  }, [recalcVisible]);
+
+  // Recalculate on mount and when layout changes
+  useEffect(() => { recalcVisible(); }, [recalcVisible]);
+
+  // ── Load annotations when document changes ─────────────────────────────
   useEffect(() => {
     if (activeTab) {
       loadAnnotations(activeTab.documentId);
@@ -160,48 +238,22 @@ export function PDFViewer() {
     }
   }, [activeTab?.documentId, loadAnnotations, loadBookmarks]);
 
-  // Track scroll position to update current page
-  const handleScroll = useCallback(
-    debounce(() => {
-      if (!containerRef.current || !activeTab) return;
-      const container = containerRef.current;
-      const scrollTop = container.scrollTop;
-      const midPoint = scrollTop + container.clientHeight / 3;
-
-      const pages = container.querySelectorAll('[data-page-number]');
-      let currentPage = 1;
-      pages.forEach(page => {
-        const rect = page.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const pageTop = rect.top - containerRect.top + scrollTop;
-        if (pageTop <= midPoint) {
-          currentPage = parseInt(page.getAttribute('data-page-number') || '1', 10);
-        }
-      });
-
-      if (currentPage !== activeTab.page) {
-        updateTab(activeTab.id, { page: currentPage });
-      }
-    }, 100),
-    [activeTab, updateTab],
-  );
-
-  // Scroll to page when page changes from external source
+  // ── Scroll to page when page changes from external source (sidebar) ────
+  const scrollingToPage = useRef(false);
   useEffect(() => {
-    if (!containerRef.current || !activeTab) return;
-    const pageEl = containerRef.current.querySelector(`[data-page-number="${activeTab.page}"]`);
-    if (pageEl) {
-      const container = containerRef.current;
-      const containerRect = container.getBoundingClientRect();
-      const pageRect = pageEl.getBoundingClientRect();
-      const relativeTop = pageRect.top - containerRect.top + container.scrollTop;
-      if (pageRect.top < containerRect.top || pageRect.bottom > containerRect.bottom) {
-        container.scrollTo({ top: relativeTop - 20, behavior: 'smooth' });
-      }
-    }
-  }, [activeTab?.page]);
+    const container = containerRef.current;
+    if (!container || !activeTab || layout.offsets.length === 0) return;
+    const idx = activeTab.page - 1;
+    if (idx < 0 || idx >= layout.offsets.length) return;
+    // Don't scroll if we just set this page from the scroll handler
+    if (activeTab.page === lastPageRef.current) return;
 
-  // Keyboard zoom
+    scrollingToPage.current = true;
+    container.scrollTo({ top: layout.offsets[idx] - 20, behavior: 'smooth' });
+    setTimeout(() => { scrollingToPage.current = false; }, 500);
+  }, [activeTab?.page, layout.offsets]);
+
+  // ── Keyboard zoom ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!activeTab) return;
@@ -222,8 +274,7 @@ export function PDFViewer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, updateTab]);
 
-  // Mouse wheel zoom with focal-point scroll (Ctrl+wheel also handles Chrome Android pinch).
-  // Uses activeTabRef so the listener is only attached once — no churn on every zoom change.
+  // ── Mouse wheel zoom ──────────────────────────────────────────────────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -239,11 +290,9 @@ export function PDFViewer() {
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       const newZoom = clamp(Math.round((oldZoom + delta) * 100) / 100, 0.25, 4);
       if (newZoom === oldZoom) return;
-      // Content-space position of the cursor (PDF units, independent of zoom)
       const contentX = (mouseX + container.scrollLeft) / oldZoom;
       const contentY = (mouseY + container.scrollTop) / oldZoom;
       updateTab(tab.id, { zoom: newZoom });
-      // After React re-renders at the new zoom, scroll so the focal point stays put
       requestAnimationFrame(() => {
         container.scrollLeft = Math.max(0, contentX * newZoom - mouseX);
         container.scrollTop  = Math.max(0, contentY * newZoom - mouseY);
@@ -251,17 +300,13 @@ export function PDFViewer() {
     };
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [updateTab]); // activeTab read via activeTabRef — no re-subscription on each zoom change
+  }, [updateTab]);
 
-  // Pinch-to-zoom: CSS transform preview during gesture → single commit on release.
-  // Applying transform: scale() to the pages container is GPU-composited, so it
-  // renders at native 60fps with zero React re-renders.  Only on touchend do we
-  // commit the final zoom to the store (one re-render total instead of one per frame).
-  // touchmove is intentionally non-passive so e.preventDefault() stops the browser's
-  // own pinch-zoom / page scroll during a two-finger gesture.
+  // ── Pinch-to-zoom ─────────────────────────────────────────────────────
   useEffect(() => {
-    const container = scrollRoot;
+    const container = containerRef.current;
     if (!container) return;
+    scrollRoot.current = container;
 
     let pinchActive   = false;
     let pinchDist     = 0;
@@ -281,13 +326,11 @@ export function PDFViewer() {
         pinchDist    = getDist(e.touches);
         pinchZoom    = activeTabRef.current?.zoom ?? 1;
         currentScale = 1;
-        const containerEl = container as HTMLDivElement;
-        const r = containerEl.getBoundingClientRect();
+        const r = container.getBoundingClientRect();
         pinchScreenX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         pinchScreenY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        // Lock the content-space anchor so all move events reference the same point
-        pinchContentX = (pinchScreenX - r.left + containerEl.scrollLeft) / pinchZoom;
-        pinchContentY = (pinchScreenY - r.top  + containerEl.scrollTop)  / pinchZoom;
+        pinchContentX = (pinchScreenX - r.left + container.scrollLeft) / pinchZoom;
+        pinchContentY = (pinchScreenY - r.top  + container.scrollTop)  / pinchZoom;
       } else {
         pinchActive = false;
         pinchDist   = 0;
@@ -297,18 +340,12 @@ export function PDFViewer() {
     const onTouchMove = (e: TouchEvent) => {
       if (!pinchActive || e.touches.length !== 2 || pinchDist === 0) return;
       e.preventDefault();
-
       currentScale = getDist(e.touches) / pinchDist;
       const pagesEl = pagesContainerRef.current;
       if (!pagesEl) return;
-
-      const containerEl = container as HTMLDivElement;
-      const r = containerEl.getBoundingClientRect();
-      // Origin = pinch centre in the pages container's local coordinate space
-      const originX = containerEl.scrollLeft + (pinchScreenX - r.left);
-      const originY = containerEl.scrollTop  + (pinchScreenY - r.top);
-
-      // Visual-only CSS transform — no React state update, GPU-composited
+      const r = container.getBoundingClientRect();
+      const originX = container.scrollLeft + (pinchScreenX - r.left);
+      const originY = container.scrollTop  + (pinchScreenY - r.top);
       pagesEl.style.transformOrigin = `${originX}px ${originY}px`;
       pagesEl.style.transform       = `scale(${currentScale})`;
     };
@@ -317,27 +354,18 @@ export function PDFViewer() {
       if (!pinchActive || e.touches.length >= 2) return;
       pinchActive = false;
       pinchDist   = 0;
-
-      const pagesEl     = pagesContainerRef.current;
-      const tab         = activeTabRef.current;
-      const containerEl = container as HTMLDivElement;
-      const r           = containerEl.getBoundingClientRect();
-
-      // Reset visual transform immediately
+      const pagesEl = pagesContainerRef.current;
+      const tab     = activeTabRef.current;
+      const r       = container.getBoundingClientRect();
       if (pagesEl) { pagesEl.style.transform = ''; pagesEl.style.transformOrigin = ''; }
       if (!tab) return;
-
       const finalZoom  = clamp(Math.round(pinchZoom * currentScale * 100) / 100, 0.25, 4);
       const targetLeft = pinchContentX * finalZoom - (pinchScreenX - r.left);
       const targetTop  = pinchContentY * finalZoom - (pinchScreenY - r.top);
-
-      // Single React state update — one re-render total instead of one per frame
       updateTab(tab.id, { zoom: finalZoom });
-
-      // After React commits the new zoom, scroll to keep the pinch centre fixed
       requestAnimationFrame(() => {
-        containerEl.scrollLeft = Math.max(0, targetLeft);
-        containerEl.scrollTop  = Math.max(0, targetTop);
+        container.scrollLeft = Math.max(0, targetLeft);
+        container.scrollTop  = Math.max(0, targetTop);
       });
     };
 
@@ -358,8 +386,9 @@ export function PDFViewer() {
       container.removeEventListener('touchend',    onTouchEnd);
       container.removeEventListener('touchcancel', onTouchCancel);
     };
-  }, [scrollRoot, updateTab]);
+  }, [updateTab]);
 
+  // ── Render ─────────────────────────────────────────────────────────────
   if (!pdf || !activeTab) {
     return (
       <div className="flex-1 flex items-center justify-center bg-surface-0">
@@ -373,19 +402,17 @@ export function PDFViewer() {
     );
   }
 
-  const pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1);
   const isDrawingMode = activeTool === 'freehand' || activeTool === 'eraser' || activeTool === 'shape'
     || activeTool === 'text' || activeTool === 'note' || activeTool === 'signature' || activeTool === 'stamp';
 
-  // Determine initial starting page (resume position)
-  const startPage = activeTab.page;
+  const [startIdx, endIdx] = visibleRange;
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden">
       {searchOpen && <SearchPanel />}
 
       <div
-        ref={containerRefCallback}
+        ref={containerRef}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',
@@ -393,32 +420,35 @@ export function PDFViewer() {
         )}
         onScroll={handleScroll}
       >
+        {/* Single container with explicit total height — only visible pages are mounted */}
         <div
           ref={pagesContainerRef}
-          className={cn(
-            'flex flex-col items-center gap-4 py-6 min-h-full',
-            focusMode && 'py-2 gap-2',
-          )}
+          className="relative w-full"
+          style={{ height: `${layout.totalHeight || (numPages * (DEFAULT_H + PAGE_GAP) + PAGE_PADDING * 2)}px` }}
         >
-          {pageNumbers.map(pageNum => (
-            <VirtualPage
-              key={pageNum}
-              pdf={pdf}
-              pageNumber={pageNum}
-              zoom={activeTab.zoom}
-              isDrawingMode={isDrawingMode}
-              pageDimensions={pageDimensions}
-              scrollRoot={scrollRoot}
-              // Pre-render pages around the starting page so it never opens blank
-              initialVisible={Math.abs(pageNum - startPage) < INITIAL_PAGES}
-            />
-          ))}
+          {Array.from({ length: Math.max(0, endIdx - startIdx + 1) }, (_, i) => {
+            const idx = startIdx + i;
+            if (idx < 0 || idx >= numPages) return null;
+            const pageNum = idx + 1;
+            const hasLayout = idx < layout.offsets.length;
+            return (
+              <VirtualPage
+                key={pageNum}
+                pdf={pdf}
+                pageNumber={pageNum}
+                zoom={activeTab.zoom}
+                isDrawingMode={isDrawingMode}
+                width={hasLayout ? layout.widths[idx] : DEFAULT_W}
+                height={hasLayout ? layout.heights[idx] : DEFAULT_H}
+                top={hasLayout ? layout.offsets[idx] : PAGE_PADDING + idx * (DEFAULT_H + PAGE_GAP)}
+              />
+            );
+          })}
         </div>
       </div>
 
       <AnnotationToolbar />
 
-      {/* AI Assistant — floating button + drawer */}
       <button
         onClick={() => useUIStore.getState().setAiDrawerOpen(true)}
         className="absolute right-4 bottom-20 z-20 w-12 h-12 flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-elevation-3 shadow-brand-500/25 hover:shadow-glow active:scale-95 transition-all"

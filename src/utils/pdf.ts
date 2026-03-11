@@ -1,8 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Use Vite's ?url import — resolves to the hashed asset path at build time,
-// served same-origin so the browser can load it as a module worker.
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export type PDFDocumentProxy = pdfjsLib.PDFDocumentProxy;
@@ -11,8 +9,6 @@ export type PDFPageProxy = pdfjsLib.PDFPageProxy;
 export async function loadPDF(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentProxy> {
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(data),
-    // Local cmaps/ folder — bundled at build time by vite-plugin-static-copy.
-    // Works offline (required for Android / Capacitor).
     cMapUrl: 'cmaps/',
     cMapPacked: true,
     enableXfa: true,
@@ -20,27 +16,105 @@ export async function loadPDF(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentPr
   return loadingTask.promise;
 }
 
+// ─── Bitmap cache ────────────────────────────────────────────────────────────
+// LRU cache of rendered page bitmaps. When a page scrolls back into view it
+// paints from cache instantly (< 1ms) instead of re-rendering via pdf.js.
+
+const CACHE_MAX = 30;
+const bitmapCache = new Map<string, ImageBitmap>();
+
+function cacheKey(pageNum: number, zoom: number): string {
+  return `${pageNum}@${zoom}`;
+}
+
+function putCache(key: string, bmp: ImageBitmap) {
+  // Evict oldest entries when over limit
+  if (bitmapCache.size >= CACHE_MAX) {
+    const oldest = bitmapCache.keys().next().value!;
+    bitmapCache.get(oldest)?.close();
+    bitmapCache.delete(oldest);
+  }
+  bitmapCache.set(key, bmp);
+}
+
+export function getCachedBitmap(pageNum: number, zoom: number): ImageBitmap | undefined {
+  return bitmapCache.get(cacheKey(pageNum, zoom));
+}
+
+/** Flush all cached bitmaps (call when document changes) */
+export function clearBitmapCache() {
+  bitmapCache.forEach(bmp => bmp.close());
+  bitmapCache.clear();
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+
+const activeRenders = new WeakMap<HTMLCanvasElement, pdfjsLib.RenderTask>();
+
+/**
+ * Render a PDF page to canvas. Uses 1x DPR for speed — the invisible text
+ * layer on top provides crisp text selection. After render, the result is
+ * cached as an ImageBitmap so re-entering the viewport is instant.
+ */
 export async function renderPage(
   page: pdfjsLib.PDFPageProxy,
   canvas: HTMLCanvasElement,
   scale: number,
-  devicePixelRatio: number = window.devicePixelRatio || 1,
 ): Promise<void> {
-  const viewport = page.getViewport({ scale: scale * devicePixelRatio });
+  const prev = activeRenders.get(canvas);
+  if (prev) prev.cancel();
+
+  // Render at 1x — biggest single speed-up (4x fewer pixels on Retina).
+  // Text remains sharp via the transparent text overlay layer.
+  const viewport = page.getViewport({ scale });
   canvas.width = viewport.width;
   canvas.height = viewport.height;
-  canvas.style.width = `${viewport.width / devicePixelRatio}px`;
-  canvas.style.height = `${viewport.height / devicePixelRatio}px`;
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
 
   const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
 
-  await page.render({
-    canvasContext: ctx,
-    viewport,
-  }).promise;
+  const task = page.render({ canvasContext: ctx, viewport });
+  activeRenders.set(canvas, task);
+
+  try {
+    await task.promise;
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Rendering cancelled')) return;
+    throw err;
+  } finally {
+    if (activeRenders.get(canvas) === task) activeRenders.delete(canvas);
+  }
+
+  // Cache the result as ImageBitmap for instant re-paint on scroll-back
+  try {
+    const bmp = await createImageBitmap(canvas);
+    putCache(cacheKey(page.pageNumber, scale), bmp);
+  } catch { /* non-critical */ }
 }
+
+/**
+ * Paint a cached bitmap onto a canvas. Returns true if cache hit.
+ */
+export function paintFromCache(
+  canvas: HTMLCanvasElement,
+  pageNum: number,
+  zoom: number,
+): boolean {
+  const bmp = bitmapCache.get(cacheKey(pageNum, zoom));
+  if (!bmp) return false;
+
+  canvas.width = bmp.width;
+  canvas.height = bmp.height;
+  canvas.style.width = `${bmp.width}px`;
+  canvas.style.height = `${bmp.height}px`;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bmp, 0, 0);
+  return true;
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
 
 export async function renderPageThumbnail(
   page: pdfjsLib.PDFPageProxy,

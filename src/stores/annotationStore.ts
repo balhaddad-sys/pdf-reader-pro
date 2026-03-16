@@ -27,6 +27,26 @@ interface AnnotationState {
   canRedo: () => boolean;
 }
 
+/** Diff two annotation arrays and sync additions/removals to IndexedDB */
+async function syncAnnotationsToDb(next: Annotation[], prev: Annotation[]) {
+  const prevIds = new Set(prev.map(a => a.id));
+  const nextIds = new Set(next.map(a => a.id));
+
+  // Annotations that were removed (in prev but not in next) → delete from DB
+  for (const a of prev) {
+    if (!nextIds.has(a.id)) {
+      await db.deleteAnnotation(a.id).catch(() => {});
+    }
+  }
+
+  // Annotations that were added (in next but not in prev) → save to DB
+  for (const a of next) {
+    if (!prevIds.has(a.id)) {
+      await db.saveAnnotation(a).catch(() => {});
+    }
+  }
+}
+
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   annotations: [],
   bookmarks: [],
@@ -116,6 +136,9 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       undoStack: undoStack.slice(0, -1),
       redoStack: [...get().redoStack, annotations],
     });
+
+    // Sync to IndexedDB: persist the restored state
+    syncAnnotationsToDb(previousState, annotations);
   },
 
   redo: () => {
@@ -128,6 +151,9 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       redoStack: redoStack.slice(0, -1),
       undoStack: [...get().undoStack, annotations],
     });
+
+    // Sync to IndexedDB: persist the restored state
+    syncAnnotationsToDb(nextState, annotations);
   },
 
   canUndo: () => get().undoStack.length > 0,

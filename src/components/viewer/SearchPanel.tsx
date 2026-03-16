@@ -16,22 +16,14 @@ function normalizeForSearch(text: string): string {
     .toLowerCase();
 }
 
-/** Clean OCR garbage from snippet — keep only real text around the match */
 function cleanSnippet(raw: string, query: string): string {
-  // Remove excessive whitespace and control chars
   let s = raw.replace(/[\x00-\x1f]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-  // Truncate to reasonable length
   if (s.length > 80) {
-    // Try to center around the query
     const qNorm = normalizeForSearch(query);
     const sNorm = normalizeForSearch(s);
     const pos = sNorm.indexOf(qNorm);
-    if (pos > 30) {
-      s = '...' + s.slice(pos - 25);
-    }
-    if (s.length > 80) {
-      s = s.slice(0, 77) + '...';
-    }
+    if (pos > 30) s = '...' + s.slice(pos - 25);
+    if (s.length > 80) s = s.slice(0, 77) + '...';
   }
   return s;
 }
@@ -58,56 +50,39 @@ export function SearchPanel() {
   const clearSearch = useSearchStore(s => s.clear);
 
   const activeTab = tabs.find(t => t.id === activeTabId);
-  const pdf = activeTab ? getPdfInstance(activeTab.documentId) : null;
+
+  // Stable refs so performSearch doesn't depend on activeTab (which changes on page nav)
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const updateTabRef = useRef(updateTab);
+  updateTabRef.current = updateTab;
 
   useEffect(() => {
     inputRef.current?.focus();
     return () => { clearSearch(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track indexing progress
   useEffect(() => {
     if (!activeTab) return;
+    const docId = activeTab.documentId;
     const update = () => {
-      const p = getIndexProgress(activeTab.documentId);
-      if (!p || p.done || !p.isOcr) {
-        setIndexPct(null);
-      } else {
-        setIndexPct(Math.round((p.indexed / p.total) * 100));
-      }
+      const p = getIndexProgress(docId);
+      if (!p || p.done || !p.isOcr) setIndexPct(null);
+      else setIndexPct(Math.round((p.indexed / p.total) * 100));
     };
     update();
     return onIndexProgress(update);
   }, [activeTab?.documentId]);
 
-  // Re-search when OCR finishes new pages
-  const lastOcrCount = useRef(0);
-  useEffect(() => {
-    if (!activeTab || !query.trim()) return;
-    const unsub = onIndexProgress(() => {
-      const p = getIndexProgress(activeTab.documentId);
-      if (!p || !p.isOcr) return;
-      if (p.done || p.indexed - lastOcrCount.current >= 5) {
-        lastOcrCount.current = p.indexed;
-        performSearch();
-      }
-    });
-    return unsub;
-  }, [activeTab?.documentId, query]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { clearSearch(); setSearchOpen(false); }
-      if (e.key === 'Enter' && matches.length > 0) {
-        e.shiftKey ? goToPrev() : goToNext();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [matches, currentMatchIndex, setSearchOpen]);
-
-  const performSearch = useCallback(async () => {
-    if (!query.trim() || !pdf || !activeTab) {
+  // ── Perform search ────────────────────────────────────────────────────────
+  // This callback only depends on query — NOT on activeTab. It reads activeTab
+  // from a ref so it doesn't get recreated when the user navigates to a result.
+  const performSearch = useCallback(async (navigateToFirst: boolean) => {
+    const tab = activeTabRef.current;
+    const pdf = tab ? getPdfInstance(tab.documentId) : null;
+    if (!query.trim() || !pdf || !tab) {
       setMatches([]);
       setProgress('');
       return;
@@ -119,7 +94,7 @@ export function SearchPanel() {
     const found: SearchMatch[] = [];
     const queryNorm = normalizeForSearch(query);
     const totalPages = pdf.numPages;
-    const docId = activeTab.documentId;
+    const docId = tab.documentId;
 
     for (let i = 1; i <= totalPages; i++) {
       if (abortRef.current) break;
@@ -162,18 +137,50 @@ export function SearchPanel() {
       setMatches(found);
       setSearching(false);
       setProgress('');
-      if (found.length > 0) {
+
+      // Only navigate to first match on initial search or query change —
+      // NOT when re-searching due to OCR updates
+      if (navigateToFirst && found.length > 0) {
         setCurrentMatchIndex(0);
-        updateTab(activeTab.id, { page: found[0].page });
+        updateTabRef.current(tab.id, { page: found[0].page });
       }
     }
-  }, [query, pdf, activeTab, updateTab, setMatches, setCurrentMatchIndex]);
+  }, [query, getPdfInstance, setMatches, setCurrentMatchIndex]);
 
+  // Trigger search when query changes (debounced)
   useEffect(() => {
     abortRef.current = true;
-    const timer = setTimeout(performSearch, 300);
+    const timer = setTimeout(() => performSearch(true), 300);
     return () => { abortRef.current = true; clearTimeout(timer); };
   }, [performSearch]);
+
+  // Re-search when OCR finishes new pages (DON'T navigate to first match)
+  const lastOcrCount = useRef(0);
+  useEffect(() => {
+    if (!activeTab || !query.trim()) return;
+    const docId = activeTab.documentId;
+    const unsub = onIndexProgress(() => {
+      const p = getIndexProgress(docId);
+      if (!p || !p.isOcr) return;
+      if (p.done || p.indexed - lastOcrCount.current >= 5) {
+        lastOcrCount.current = p.indexed;
+        performSearch(false); // don't navigate — preserve user's position
+      }
+    });
+    return unsub;
+  }, [activeTab?.documentId, query, performSearch]);
+
+  // Keyboard: Escape closes, Enter navigates
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { clearSearch(); setSearchOpen(false); }
+      if (e.key === 'Enter' && matches.length > 0) {
+        e.shiftKey ? goToPrev() : goToNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [matches, currentMatchIndex, setSearchOpen, clearSearch]);
 
   // Auto-scroll result list to current match
   useEffect(() => {
@@ -187,15 +194,23 @@ export function SearchPanel() {
     if (matches.length === 0) return;
     const next = (currentMatchIndex + 1) % matches.length;
     setCurrentMatchIndex(next);
-    if (activeTab) updateTab(activeTab.id, { page: matches[next].page });
-  }, [matches, currentMatchIndex, activeTab, updateTab, setCurrentMatchIndex]);
+    const tab = activeTabRef.current;
+    if (tab) updateTabRef.current(tab.id, { page: matches[next].page });
+  }, [matches, currentMatchIndex, setCurrentMatchIndex]);
 
   const goToPrev = useCallback(() => {
     if (matches.length === 0) return;
     const prev = (currentMatchIndex - 1 + matches.length) % matches.length;
     setCurrentMatchIndex(prev);
-    if (activeTab) updateTab(activeTab.id, { page: matches[prev].page });
-  }, [matches, currentMatchIndex, activeTab, updateTab, setCurrentMatchIndex]);
+    const tab = activeTabRef.current;
+    if (tab) updateTabRef.current(tab.id, { page: matches[prev].page });
+  }, [matches, currentMatchIndex, setCurrentMatchIndex]);
+
+  const handleResultClick = useCallback((idx: number) => {
+    setCurrentMatchIndex(idx);
+    const tab = activeTabRef.current;
+    if (tab) updateTabRef.current(tab.id, { page: matches[idx].page });
+  }, [matches, setCurrentMatchIndex]);
 
   const close = () => {
     abortRef.current = true;
@@ -207,9 +222,9 @@ export function SearchPanel() {
   const noResults = !searching && query.trim() && matches.length === 0;
 
   return (
-    <div className="absolute top-0 right-0 z-20 m-3 animate-slide-down w-80 max-w-[calc(100vw-1.5rem)]">
+    <div className="absolute top-0 left-0 right-0 sm:left-auto z-20 m-2 sm:m-3 animate-slide-down sm:w-80 max-w-[calc(100vw-1rem)]">
       {/* Search bar */}
-      <div className="flex items-center gap-1.5 bg-surface-2 border border-border rounded-xl shadow-elevation-3 px-2 py-1">
+      <div className="flex items-center gap-1.5 bg-surface-2 border border-border rounded-xl shadow-elevation-3 px-2 py-1.5 sm:py-1">
         <Search size={14} className="text-on-surface-secondary shrink-0" />
         <input
           ref={inputRef}
@@ -218,7 +233,7 @@ export function SearchPanel() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search in document..."
-          className="flex-1 min-w-0 h-7 text-sm bg-transparent text-on-surface placeholder:text-on-surface-secondary/50 focus:outline-none"
+          className="flex-1 min-w-0 h-8 sm:h-7 text-sm bg-transparent text-on-surface placeholder:text-on-surface-secondary/50 focus:outline-none"
         />
 
         {query && (
@@ -238,17 +253,17 @@ export function SearchPanel() {
 
         <div className="flex items-center">
           <button onClick={goToPrev} disabled={!hasResults}
-            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 disabled:opacity-30 transition-opacity">
+            className="w-7 h-7 sm:w-6 sm:h-6 rounded-md flex items-center justify-center hover:bg-white/10 active:bg-white/20 disabled:opacity-30 transition-opacity">
             <ChevronUp size={14} />
           </button>
           <button onClick={goToNext} disabled={!hasResults}
-            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 disabled:opacity-30 transition-opacity">
+            className="w-7 h-7 sm:w-6 sm:h-6 rounded-md flex items-center justify-center hover:bg-white/10 active:bg-white/20 disabled:opacity-30 transition-opacity">
             <ChevronDown size={14} />
           </button>
         </div>
 
         <button onClick={close}
-          className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 shrink-0">
+          className="w-7 h-7 sm:w-6 sm:h-6 rounded-md flex items-center justify-center hover:bg-white/10 active:bg-white/20 shrink-0">
           <X size={14} />
         </button>
       </div>
@@ -290,10 +305,7 @@ export function SearchPanel() {
           {matches.slice(0, 100).map((match, idx) => (
             <button
               key={`${match.page}-${match.charOffset}-${idx}`}
-              onClick={() => {
-                setCurrentMatchIndex(idx);
-                if (activeTab) updateTab(activeTab.id, { page: match.page });
-              }}
+              onClick={() => handleResultClick(idx)}
               className={cn(
                 'w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors',
                 idx === currentMatchIndex

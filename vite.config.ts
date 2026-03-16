@@ -44,11 +44,14 @@ function apiProxy(): Plugin {
         for await (const chunk of req) chunks.push(chunk as Buffer);
         const body = JSON.parse(Buffer.concat(chunks).toString());
 
-        if (!body.messages || !Array.isArray(body.messages)) {
+        if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
           res.statusCode = 400;
           res.end(JSON.stringify({ error: 'Missing messages array' }));
           return;
         }
+
+        // Cap messages to prevent context abuse
+        const cappedMessages = body.messages.slice(-8);
 
         try {
           const apiRes = await fetch(ANTHROPIC_URL, {
@@ -62,7 +65,7 @@ function apiProxy(): Plugin {
               model: MODEL,
               max_tokens: 2048,
               system: SYSTEM_PROMPT,
-              messages: body.messages,
+              messages: cappedMessages,
             }),
           });
 
@@ -118,7 +121,9 @@ export default defineConfig({
         orientation: 'any',
         categories: ['productivity', 'education', 'utilities'],
         icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/favicon.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: '/favicon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
       workbox: {

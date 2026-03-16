@@ -11,13 +11,13 @@ export function TabBar() {
   if (tabs.length <= 1) return null;
 
   return (
-    <div className="h-9 flex items-end bg-surface-1 border-b border-border overflow-x-auto shrink-0 px-1">
+    <div className="h-10 sm:h-9 flex items-end bg-surface-1 border-b border-border overflow-x-auto shrink-0 px-1 scrollbar-hide">
       {tabs.map(tab => (
         <button
           key={tab.id}
           className={cn(
-            'group relative flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-t-lg transition-all',
-            'min-w-[120px] max-w-[200px]',
+            'group relative flex items-center gap-1.5 h-9 sm:h-8 px-3 text-xs font-medium rounded-t-lg transition-all',
+            'min-w-[100px] max-w-[180px] sm:min-w-[120px] sm:max-w-[200px]',
             tab.id === activeTabId
               ? 'bg-surface-0 text-on-surface border-t border-x border-border'
               : 'text-on-surface-secondary hover:text-on-surface hover:bg-white/5',
@@ -29,9 +29,10 @@ export function TabBar() {
           <span
             role="button"
             className={cn(
-              'w-5 h-5 rounded-md flex items-center justify-center shrink-0',
-              'opacity-0 group-hover:opacity-100 hover:bg-white/15 transition-all',
-              tab.id === activeTabId && 'opacity-50',
+              'w-6 h-6 sm:w-5 sm:h-5 rounded-md flex items-center justify-center shrink-0',
+              // Always visible on touch, hover-reveal on desktop
+              'opacity-50 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white/15 active:bg-white/25 transition-all',
+              tab.id === activeTabId && 'opacity-70 sm:opacity-50',
             )}
             onClick={(e) => {
               e.stopPropagation();

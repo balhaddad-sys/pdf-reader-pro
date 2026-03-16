@@ -13,7 +13,31 @@ const SYSTEM_PROMPT = [
   "If the user's message references previous conversation, use the chat history to understand context.",
 ].join(' ');
 
+// ── Rate limiting (in-memory, per IP, resets on cold start) ────────────────
+const MAX_REQUESTS_PER_MINUTE = 10;
+const MAX_BODY_BYTES = 512_000; // ~500KB max request body
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+
+  entry.count++;
+  return entry.count > MAX_REQUESTS_PER_MINUTE;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS preflight
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -22,10 +46,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server.' });
   }
 
+  // Rate limiting by IP
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+    || req.socket?.remoteAddress || 'unknown';
+  if (isRateLimited(clientIp)) {
+    return res.status(429).json({ error: 'Too many requests. Please wait a moment.' });
+  }
+
+  // Body size guard
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > MAX_BODY_BYTES) {
+    return res.status(413).json({ error: 'Request too large.' });
+  }
+
   const { messages } = req.body;
-  if (!messages || !Array.isArray(messages)) {
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Missing messages array in request body.' });
   }
+
+  // Validate message structure — only allow 'user' and 'assistant' roles
+  for (const msg of messages) {
+    if (!msg.role || !['user', 'assistant'].includes(msg.role)) {
+      return res.status(400).json({ error: 'Invalid message role.' });
+    }
+    if (!msg.content) {
+      return res.status(400).json({ error: 'Message content is required.' });
+    }
+  }
+
+  // Cap number of messages to prevent context abuse
+  const cappedMessages = messages.slice(-8);
 
   try {
     const response = await fetch(ANTHROPIC_URL, {
@@ -39,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         model: MODEL,
         max_tokens: 2048,
         system: SYSTEM_PROMPT,
-        messages,
+        messages: cappedMessages,
       }),
     });
 

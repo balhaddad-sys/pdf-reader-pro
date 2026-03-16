@@ -28,7 +28,7 @@ export function DocumentCard({ document, layout, isLoading = false, onOpen }: Do
     return (
       <div
         className={cn(
-          'group relative flex items-center gap-4 px-4 py-3 rounded-xl transition-all cursor-pointer',
+          'group relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all cursor-pointer',
           'hover:bg-surface-2 active:bg-surface-3',
           isLoading && 'pointer-events-none',
         )}
@@ -52,7 +52,7 @@ export function DocumentCard({ document, layout, isLoading = false, onOpen }: Do
         {/* Info */}
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-on-surface truncate">{document.name}</h3>
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
             <span className="text-2xs text-on-surface-secondary">{document.pageCount} pages</span>
             <span className="text-2xs text-on-surface-secondary">{formatFileSize(document.size)}</span>
             <span className="text-2xs text-on-surface-secondary flex items-center gap-1">
@@ -62,28 +62,28 @@ export function DocumentCard({ document, layout, isLoading = false, onOpen }: Do
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Actions — always visible on mobile, hover-reveal on desktop */}
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); toggleFavorite(document.id); }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/10"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center hover:bg-white/10 active:bg-white/20"
           >
             <Star size={14} fill={document.favorite ? 'currentColor' : 'none'} className={document.favorite ? 'text-yellow-400' : 'text-on-surface-secondary'} />
           </button>
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/10"
+              className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center hover:bg-white/10 active:bg-white/20"
             >
               <MoreVertical size={14} />
             </button>
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-surface-3 border border-border rounded-xl shadow-elevation-3 z-20 py-1 animate-scale-in">
+                <div className="absolute right-0 top-full mt-1 w-44 bg-surface-3 border border-border rounded-xl shadow-elevation-3 z-20 py-1 animate-scale-in">
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 size={14} />
                     Delete document
@@ -149,7 +149,7 @@ export function DocumentCard({ document, layout, isLoading = false, onOpen }: Do
       </div>
 
       {/* Info */}
-      <div className="px-3 py-2.5">
+      <div className="px-2.5 sm:px-3 py-2 sm:py-2.5">
         <h3 className="text-xs font-medium text-on-surface truncate leading-tight">{document.name}</h3>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-2xs text-on-surface-secondary">{document.pageCount}p</span>
@@ -157,29 +157,29 @@ export function DocumentCard({ document, layout, isLoading = false, onOpen }: Do
         </div>
       </div>
 
-      {/* Context menu trigger */}
-      <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Context menu trigger — always visible on mobile */}
+      <div className="absolute top-2 left-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <div className="relative">
           <button
             onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-            className="w-7 h-7 rounded-lg bg-black/40 backdrop-blur-sm flex items-center justify-center hover:bg-black/60 text-white"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg bg-black/40 backdrop-blur-sm flex items-center justify-center hover:bg-black/60 active:bg-black/70 text-white"
           >
             <MoreVertical size={12} />
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
-              <div className="absolute left-0 top-full mt-1 w-40 bg-surface-3 border border-border rounded-xl shadow-elevation-3 z-20 py-1 animate-scale-in">
+              <div className="absolute left-0 top-full mt-1 w-44 bg-surface-3 border border-border rounded-xl shadow-elevation-3 z-20 py-1 animate-scale-in">
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleFavorite(document.id); setMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-on-surface-secondary hover:text-on-surface hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-on-surface-secondary hover:text-on-surface hover:bg-white/5 transition-colors"
                 >
                   <Star size={14} fill={document.favorite ? 'currentColor' : 'none'} />
                   {document.favorite ? 'Unfavorite' : 'Favorite'}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 size={14} />
                   Delete

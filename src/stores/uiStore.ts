@@ -47,12 +47,14 @@ interface UIState {
   shortcutsOpen: boolean;
   setShortcutsOpen: (open: boolean) => void;
 
-  // AI assistant drawer
+  // AI assistant drawer — messages scoped per document
   aiDrawerOpen: boolean;
   setAiDrawerOpen: (open: boolean) => void;
   aiMessages: { role: 'user' | 'ai'; text: string }[];
-  addAiMessage: (role: 'user' | 'ai', text: string) => void;
+  aiDocumentId: string | null;
+  addAiMessage: (role: 'user' | 'ai', text: string, documentId?: string) => void;
   clearAiMessages: () => void;
+  switchAiDocument: (documentId: string) => void;
 
   // Reading mode
   focusMode: boolean;
@@ -118,8 +120,21 @@ export const useUIStore = create<UIState>((set) => ({
   aiDrawerOpen: false,
   setAiDrawerOpen: (open) => set({ aiDrawerOpen: open }),
   aiMessages: [],
-  addAiMessage: (role, text) => set(s => ({ aiMessages: [...s.aiMessages, { role, text }] })),
-  clearAiMessages: () => set({ aiMessages: [] }),
+  aiDocumentId: null,
+  addAiMessage: (role, text, documentId) => set(s => {
+    // If document changed, start fresh conversation
+    if (documentId && documentId !== s.aiDocumentId) {
+      return { aiMessages: [{ role, text }], aiDocumentId: documentId };
+    }
+    return { aiMessages: [...s.aiMessages, { role, text }] };
+  }),
+  clearAiMessages: () => set({ aiMessages: [], aiDocumentId: null }),
+  switchAiDocument: (documentId) => set(s => {
+    if (s.aiDocumentId && s.aiDocumentId !== documentId) {
+      return { aiMessages: [], aiDocumentId: documentId };
+    }
+    return { aiDocumentId: documentId };
+  }),
 
   focusMode: false,
   setFocusMode: (focus) => set({ focusMode: focus }),

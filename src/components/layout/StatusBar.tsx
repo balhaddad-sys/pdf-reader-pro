@@ -23,7 +23,7 @@ export function StatusBar() {
       style={{ minHeight: '2rem', paddingTop: '0.25rem', paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
     >
       {/* Document name */}
-      <span className="font-medium text-on-surface truncate max-w-[160px] sm:max-w-[240px]">
+      <span className="font-medium text-on-surface truncate max-w-[120px] sm:max-w-[240px]">
         {doc.name}
       </span>
 

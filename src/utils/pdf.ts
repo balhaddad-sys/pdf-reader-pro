@@ -50,12 +50,13 @@ export function clearBitmapCache() {
 
 // ─── Render ──────────────────────────────────────────────────────────────────
 
-const activeRenders = new WeakMap<HTMLCanvasElement, pdfjsLib.RenderTask>();
+const activeRenders = new Map<HTMLCanvasElement, pdfjsLib.RenderTask>();
 
 /**
- * Render a PDF page to canvas. Uses 1x DPR for speed — the invisible text
- * layer on top provides crisp text selection. After render, the result is
- * cached as an ImageBitmap so re-entering the viewport is instant.
+ * Render a PDF page using double-buffering: draws to a hidden offscreen
+ * canvas, then copies the result to the visible canvas in one atomic
+ * `drawImage` call. The visible canvas is NEVER cleared — the user sees
+ * either the old frame or the new frame, never a blank white flash.
  */
 export async function renderPage(
   page: pdfjsLib.PDFPageProxy,
@@ -65,17 +66,20 @@ export async function renderPage(
   const prev = activeRenders.get(canvas);
   if (prev) prev.cancel();
 
-  // Render at 1x — biggest single speed-up (4x fewer pixels on Retina).
-  // Text remains sharp via the transparent text overlay layer.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const viewport = page.getViewport({ scale });
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  canvas.style.width = `${viewport.width}px`;
-  canvas.style.height = `${viewport.height}px`;
+  const pxW = Math.floor(viewport.width * dpr);
+  const pxH = Math.floor(viewport.height * dpr);
 
-  const ctx = canvas.getContext('2d')!;
+  // ── Phase 1: render to offscreen canvas (invisible) ────────────────────
+  const offscreen = document.createElement('canvas');
+  offscreen.width = pxW;
+  offscreen.height = pxH;
 
-  const task = page.render({ canvasContext: ctx, viewport });
+  const offCtx = offscreen.getContext('2d')!;
+  offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const task = page.render({ canvasContext: offCtx, viewport });
   activeRenders.set(canvas, task);
 
   try {
@@ -87,7 +91,19 @@ export async function renderPage(
     if (activeRenders.get(canvas) === task) activeRenders.delete(canvas);
   }
 
-  // Cache the result as ImageBitmap for instant re-paint on scroll-back
+  // ── Phase 2: atomic swap — blit offscreen to visible canvas ────────────
+  // Setting width/height clears the canvas, but we immediately draw over it
+  // in the same synchronous block so the browser never paints the blank frame.
+  canvas.width = pxW;
+  canvas.height = pxH;
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(offscreen, 0, 0);
+
+  // Cache for instant re-paint on scroll-back
   try {
     const bmp = await createImageBitmap(canvas);
     putCache(cacheKey(page.pageNumber, scale), bmp);
@@ -96,6 +112,7 @@ export async function renderPage(
 
 /**
  * Paint a cached bitmap onto a canvas. Returns true if cache hit.
+ * Uses the same atomic clear+draw pattern so no blank frame is visible.
  */
 export function paintFromCache(
   canvas: HTMLCanvasElement,
@@ -105,13 +122,18 @@ export function paintFromCache(
   const bmp = bitmapCache.get(cacheKey(pageNum, zoom));
   if (!bmp) return false;
 
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  // Atomic: clear + draw in same synchronous block — no blank frame
   canvas.width = bmp.width;
   canvas.height = bmp.height;
-  canvas.style.width = `${bmp.width}px`;
-  canvas.style.height = `${bmp.height}px`;
-
   const ctx = canvas.getContext('2d')!;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(bmp, 0, 0);
+
+  canvas.style.width = `${Math.floor(bmp.width / dpr)}px`;
+  canvas.style.height = `${Math.floor(bmp.height / dpr)}px`;
+
   return true;
 }
 
@@ -122,7 +144,9 @@ export async function renderPageThumbnail(
   maxWidth: number = 200,
 ): Promise<string> {
   const viewport = page.getViewport({ scale: 1 });
-  const scale = maxWidth / viewport.width;
+  // Render thumbnail at higher res for crisp display on high-DPI screens
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const scale = (maxWidth * dpr) / viewport.width;
   const thumbViewport = page.getViewport({ scale });
 
   const canvas = document.createElement('canvas');
@@ -135,7 +159,7 @@ export async function renderPageThumbnail(
     viewport: thumbViewport,
   }).promise;
 
-  return canvas.toDataURL('image/jpeg', 0.7);
+  return canvas.toDataURL('image/jpeg', 0.8);
 }
 
 export async function getPageText(page: pdfjsLib.PDFPageProxy): Promise<string> {

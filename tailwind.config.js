@@ -55,6 +55,7 @@ export default {
         'slide-up': 'slideUp 300ms cubic-bezier(0.16, 1, 0.3, 1)',
         'slide-down': 'slideDown 300ms cubic-bezier(0.16, 1, 0.3, 1)',
         'slide-in-right': 'slideInRight 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-left': 'slideInLeft 300ms cubic-bezier(0.16, 1, 0.3, 1)',
         'scale-in': 'scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1)',
         'spinner': 'spin 800ms linear infinite',
         'pulse-slow': 'pulse 3s ease-in-out infinite',
@@ -79,6 +80,10 @@ export default {
         },
         slideInRight: {
           '0%': { transform: 'translateX(16px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-16px)', opacity: '0' },
           '100%': { transform: 'translateX(0)', opacity: '1' },
         },
         scaleIn: {

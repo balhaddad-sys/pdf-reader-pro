@@ -1,17 +1,58 @@
-const API_URL = '/api/chat';
-const MAX_RETRIES = 4;
+// On web, use the server proxy. On Capacitor (Android/iOS), call Anthropic directly.
+const IS_CAPACITOR = typeof window !== 'undefined' && (
+  window.location.protocol === 'capacitor:'
+  || navigator.userAgent.includes('wv')
+  || 'Capacitor' in window
+);
+
+const PROXY_URL = '/api/chat';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
+const MODEL = 'claude-sonnet-4-6';
+const SYSTEM_PROMPT = [
+  'You are a helpful PDF reading assistant embedded in a PDF reader app.',
+  'Answer based on the page content provided. Be concise, well-structured, and accurate.',
+  'Use markdown formatting: **bold** for key terms, bullet lists for multiple points, `code` for technical terms.',
+  'IMPORTANT: Always reply in the same language the user writes their question in.',
+  "If the user asks in Arabic, reply in Arabic. If French, reply in French. Match the user's language exactly.",
+].join(' ');
+
+const MAX_RETRIES = 3;
 
 async function callClaude(messages: { role: string; content: unknown }[]): Promise<string> {
+  const cappedMessages = messages.slice(-8);
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages }),
-    });
+    let response: Response;
+
+    if (IS_CAPACITOR && ANTHROPIC_KEY) {
+      // Direct API call for Android/iOS builds
+      response = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 2048,
+          system: SYSTEM_PROMPT,
+          messages: cappedMessages,
+        }),
+      });
+    } else {
+      // Web: use server proxy
+      response = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: cappedMessages }),
+      });
+    }
 
     if (response.status === 429) {
-      const delay = (attempt + 1) * 3000;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise(r => setTimeout(r, (attempt + 1) * 3000));
       continue;
     }
 

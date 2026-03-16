@@ -14,28 +14,32 @@
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p class="date">Effective date: March 4, 2026</p>
+  <p class="date">Effective date: March 16, 2026</p>
 
   <p>PDF Reader Pro ("the App") is developed by balhaddad-sys. This policy describes how the App handles your data.</p>
 
   <h2>Data We Collect</h2>
-  <p>The App does <strong>not</strong> collect, store, or transmit any personal information. All PDF files you open are processed entirely on your device.</p>
+  <p>The App does <strong>not</strong> collect, store, or transmit any personal information. All PDF files you open are processed and stored entirely on your device using IndexedDB.</p>
 
   <h2>AI Assistant Feature</h2>
-  <p>The App includes an optional AI assistant powered by Google Gemini. When you use this feature:</p>
+  <p>The App includes an optional AI assistant powered by <strong>Anthropic's Claude API</strong>. When you use this feature:</p>
   <ul>
-    <li>The text content (or images) of the currently viewed PDF pages are sent to the Google Gemini API to generate answers to your questions.</li>
-    <li>Your questions and the AI responses are stored locally on your device only and are not sent to any other server.</li>
+    <li>The text content (or screenshot images) of the currently viewed PDF pages are sent to the Anthropic Claude API via our server-side proxy to generate answers to your questions.</li>
+    <li>Only the pages near your current view are sent — not the entire document.</li>
+    <li>Your questions and the AI responses are stored locally on your device only.</li>
     <li>No personal identifiers are included in API requests.</li>
+    <li>Chat history is scoped per document and is cleared when you switch documents.</li>
   </ul>
-  <p>Google's use of data sent to the Gemini API is governed by <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</p>
+  <p>Anthropic's use of data sent to the Claude API is governed by <a href="https://www.anthropic.com/privacy">Anthropic's Privacy Policy</a>.</p>
+  <p><strong>If you do not use the AI assistant feature, no data leaves your device.</strong></p>
 
   <h2>Data Storage</h2>
-  <p>All app data (annotations, bookmarks, settings) is stored locally on your device using IndexedDB. Nothing is uploaded to external servers.</p>
+  <p>All app data (documents, annotations, bookmarks, settings) is stored locally on your device using IndexedDB. Nothing is uploaded to external servers except as described in the AI Assistant section above.</p>
 
   <h2>Third-Party Services</h2>
   <ul>
-    <li><strong>Google Gemini API</strong> — used only when you actively use the AI assistant feature.</li>
+    <li><strong>Anthropic Claude API</strong> — used only when you actively use the AI assistant feature.</li>
+    <li><strong>Google Fonts</strong> — the Inter font is loaded from Google's CDN for typography.</li>
   </ul>
   <p>No analytics, advertising, or tracking SDKs are included in the App.</p>
 

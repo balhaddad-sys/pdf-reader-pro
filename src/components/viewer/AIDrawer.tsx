@@ -130,11 +130,17 @@ export function AIDrawer() {
   const messages = useUIStore(s => s.aiMessages);
   const addMessage = useUIStore(s => s.addAiMessage);
   const clearMessages = useUIStore(s => s.clearAiMessages);
+  const switchAiDocument = useUIStore(s => s.switchAiDocument);
 
   const tabs = useDocumentStore(s => s.tabs);
   const activeTabId = useDocumentStore(s => s.activeTabId);
   const getPdfInstance = useDocumentStore(s => s.getPdfInstance);
   const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // Clear chat when switching documents to prevent context leak
+  useEffect(() => {
+    if (activeTab) switchAiDocument(activeTab.documentId);
+  }, [activeTab?.documentId, switchAiDocument]);
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -189,7 +195,7 @@ export function AIDrawer() {
     const q = (overrideText ?? input).trim();
     if (!q || loading || !activeTab) return;
 
-    addMessage('user', q);
+    addMessage('user', q, activeTab.documentId);
     if (!overrideText) setInput('');
     setLoading(true);
 
@@ -265,10 +271,14 @@ export function AIDrawer() {
         ref={panelRef}
         className={cn(
           'fixed top-0 right-0 bottom-0 z-40 flex flex-col',
-          'w-full sm:w-[340px] bg-surface-2 border-l border-border shadow-elevation-4',
+          'w-full sm:w-[360px] bg-surface-2 border-l border-border shadow-elevation-4',
           'animate-slide-in-right',
         )}
-        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingRight: 'env(safe-area-inset-right, 0px)',
+        }}
       >
         {/* Drag handle strip */}
         <div
@@ -373,7 +383,7 @@ export function AIDrawer() {
 
         {/* ─── Input bar ───────────────────────────────────────────────────── */}
         <div className="shrink-0 border-t border-border bg-surface-2">
-          <div className="px-3 py-2.5">
+          <div className="px-3 py-2 sm:py-2.5">
             <div className="flex items-end gap-2 bg-surface-1 border border-border rounded-2xl px-3 py-1.5 focus-within:border-brand-500/50 focus-within:shadow-glow transition-all">
               <textarea
                 ref={textareaRef}
@@ -383,23 +393,23 @@ export function AIDrawer() {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about this page..."
                 rows={1}
-                className="flex-1 bg-transparent text-xs text-on-surface placeholder:text-on-surface-secondary/40 focus:outline-none resize-none leading-relaxed py-1"
-                style={{ height: '36px', maxHeight: '120px' }}
+                className="flex-1 bg-transparent text-sm sm:text-xs text-on-surface placeholder:text-on-surface-secondary/40 focus:outline-none resize-none leading-relaxed py-1.5 sm:py-1"
+                style={{ height: '40px', maxHeight: '120px' }}
               />
               <button
                 onClick={() => handleSend()}
                 disabled={!input.trim() || loading}
                 className={cn(
-                  'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-all mb-0.5',
+                  'shrink-0 w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl transition-all mb-0.5',
                   input.trim() && !loading
                     ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-glow active:scale-95'
                     : 'text-on-surface-secondary/30 cursor-not-allowed',
                 )}
               >
-                <Send size={13} />
+                <Send size={14} />
               </button>
             </div>
-            <p className="text-center text-2xs text-on-surface-secondary/30 mt-1.5">
+            <p className="hidden sm:block text-center text-2xs text-on-surface-secondary/30 mt-1.5">
               Shift+Enter for new line
             </p>
           </div>

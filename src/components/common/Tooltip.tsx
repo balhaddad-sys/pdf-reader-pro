@@ -37,8 +37,11 @@ export function Tooltip({ content, shortcut, children, side = 'top', delay = 400
           className={cn(
             'absolute z-[100] pointer-events-none animate-fade-in',
             'px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap',
-            'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
+            // Theme-aware: use surface/text CSS variables
+            'bg-surface-4 text-on-surface border border-border',
             'shadow-elevation-3',
+            // Hide on touch devices — tooltips are useless there
+            'hidden sm:block',
             positionClasses[side],
           )}
         >

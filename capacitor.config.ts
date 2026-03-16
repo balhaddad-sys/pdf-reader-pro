@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       launchShowDuration: 800,
-      launchAutoHide: false, // We hide it manually after init
+      launchAutoHide: false,
       backgroundColor: '#0f0f14',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
@@ -22,6 +22,11 @@ const config: CapacitorConfig = {
 
   android: {
     allowMixedContent: false,
+  },
+
+  server: {
+    // Allow Anthropic API calls from the WebView
+    androidScheme: 'https',
   },
 };
 

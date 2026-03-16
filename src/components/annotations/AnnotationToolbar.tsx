@@ -153,8 +153,8 @@ export function AnnotationToolbar() {
            Mobile: 44px tall buttons with icon + label, horizontal scroll.
            Desktop: 28px icon-only buttons, centered, no scroll needed.      */}
       {!toolbarCollapsed && <div
-        className="flex items-center gap-0.5 overflow-x-auto px-2 py-1 md:justify-center md:px-3 md:h-12 md:py-0"
-        style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+        className="flex items-center gap-0.5 overflow-x-auto px-2 py-1 md:justify-center md:px-3 md:h-12 md:py-0 scrollbar-hide"
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {/* All tools */}
         <div className="flex items-center gap-0.5 shrink-0">
@@ -219,8 +219,8 @@ export function AnnotationToolbar() {
       {/* ── Secondary row: shape sub-type + stroke width ─────────────────── */}
       {!toolbarCollapsed && (showShapePicker || showStrokeWidth) && (
         <div
-          className="flex items-center gap-2 overflow-x-auto px-2 py-1.5 border-t border-border/50 bg-surface-0/50 md:justify-center md:h-9 md:py-0"
-          style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+          className="flex items-center gap-2 overflow-x-auto px-2 py-1.5 border-t border-border/50 bg-surface-0/50 md:justify-center md:h-9 md:py-0 scrollbar-hide"
+          style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {showShapePicker && (
             <div className="flex items-center gap-0.5 shrink-0">

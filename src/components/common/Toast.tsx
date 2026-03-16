@@ -9,13 +9,22 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2 pointer-events-none">
+    <div
+      className={cn(
+        'fixed z-[200] flex flex-col gap-2 pointer-events-none',
+        // Mobile: centered at bottom, full width with padding
+        'bottom-4 left-4 right-4 items-center',
+        // Desktop: bottom-right corner
+        'sm:left-auto sm:right-6 sm:bottom-6 sm:items-end',
+      )}
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       {toasts.map(toast => (
         <div
           key={toast.id}
           className={cn(
             'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl',
-            'shadow-elevation-3 animate-slide-up min-w-[280px] max-w-md',
+            'shadow-elevation-3 animate-slide-up w-full sm:w-auto sm:min-w-[280px] sm:max-w-md',
             'bg-surface-3 border border-border',
           )}
         >
@@ -25,7 +34,7 @@ export function ToastContainer() {
           <span className="text-sm text-on-surface flex-1">{toast.message}</span>
           <button
             onClick={() => removeToast(toast.id)}
-            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 shrink-0"
+            className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-white/10 active:bg-white/20 shrink-0"
           >
             <X size={14} />
           </button>

@@ -118,9 +118,10 @@ input[type='number'] {
   background-color: rgba(249, 115, 22, 0.7); /* orange — current match */
 }
 
-/* Page rendering transitions */
+/* Page rendering — use high-quality scaling for crisp PDF text */
 canvas {
-  image-rendering: -webkit-optimize-contrast;
+  image-rendering: auto;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Custom height utility */
@@ -161,3 +162,49 @@ canvas {
   background: inherit;
   transform: rotate(45deg);
 }
+
+/* ─── Mobile & Touch Enhancements ─────────────────────────────── */
+
+/* Larger scrollbar hit target on touch devices */
+@media (pointer: coarse) {
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { min-height: 48px; }
+}
+
+/* Hide scrollbars on mobile for cleaner look in toolbars */
+.scrollbar-hide { scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* Prevent text selection during gestures */
+.touch-action-pan-x { touch-action: pan-x; }
+.touch-action-pan-y { touch-action: pan-y; }
+
+/* Smooth momentum scrolling for all scrollable areas on mobile */
+@supports (-webkit-overflow-scrolling: touch) {
+  .overflow-y-auto,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ─── Fold / Dual-screen Device Support ───────────────────────── */
+
+/* Samsung Galaxy Fold (closed): ~280-320px width */
+@media (max-width: 320px) {
+  .fold-compact { font-size: 0.6rem !important; }
+}
+
+/* Spanning modes for dual-screen devices (Surface Duo, etc.) */
+@media (horizontal-viewport-segments: 2) {
+  .dual-screen-main {
+    display: grid;
+    grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
+    column-gap: env(viewport-segment-left 1 0, 0px);
+  }
+}
+
+/* ─── Safe area helpers ───────────────────────────────────────── */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.pl-safe { padding-left: env(safe-area-inset-left, 0px); }
+.pr-safe { padding-right: env(safe-area-inset-right, 0px); }

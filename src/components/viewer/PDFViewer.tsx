@@ -382,6 +382,11 @@ export function PDFViewer() {
   }, [updateTab]);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
+  // Don't preventDefault on touchstart — it cancels touch tracking on some
+  // browsers and prevents subsequent touchmove events from firing.
+  // The viewport meta (maximum-scale=1, user-scalable=no) already blocks
+  // browser zoom. We only preventDefault on touchmove to stop the browser
+  // from panning/scrolling during an active pinch.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -394,18 +399,21 @@ export function PDFViewer() {
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();          // stop browser pinch-zoom
+      if (e.touches.length >= 2) {
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
-      } else {
-        pinchActive = false;
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!pinchActive || e.touches.length !== 2 || pinchDist === 0) return;
+      // Detect pinch start mid-gesture (finger added during scroll)
+      if (!pinchActive && e.touches.length >= 2) {
+        pinchActive = true;
+        pinchDist   = getDist(e.touches);
+        pinchZoom   = activeTabRef.current?.zoom ?? 1;
+      }
+      if (!pinchActive || e.touches.length < 2 || pinchDist === 0) return;
       e.preventDefault();
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
@@ -415,13 +423,20 @@ export function PDFViewer() {
       }
     };
 
-    const onTouchEnd = () => { pinchActive = false; };
-    const onTouchCancel = () => { pinchActive = false; };
+    const onTouchEnd = (e: TouchEvent) => {
+      // Only deactivate when fewer than 2 fingers remain
+      if (e.touches.length < 2) {
+        pinchActive = false;
+        pinchDist   = 0;
+      }
+    };
+
+    const onTouchCancel = () => { pinchActive = false; pinchDist = 0; };
 
     // Prevent Safari gesturestart/gesturechange from triggering browser zoom
     const preventGesture = (e: Event) => e.preventDefault();
 
-    container.addEventListener('touchstart',    onTouchStart,   { passive: false });
+    container.addEventListener('touchstart',    onTouchStart,   { passive: true });
     container.addEventListener('touchmove',     onTouchMove,    { passive: false });
     container.addEventListener('touchend',      onTouchEnd,     { passive: true });
     container.addEventListener('touchcancel',   onTouchCancel,  { passive: true });

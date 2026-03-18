@@ -382,9 +382,14 @@ export function PDFViewer() {
   }, [updateTab]);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
-  // Register on DOCUMENT in capture phase so no element's touch-action can
-  // intercept or cancel the events before we see them. We check if the
-  // touch originated inside our viewer container before acting.
+  // Strategy: touch-action "pan-y pinch-zoom" tells the browser to allow
+  // native vertical scroll AND deliver pinch gesture touch events to JS.
+  // We preventDefault on touchmove during a pinch to stop the browser from
+  // actually zooming the page. This works because pinch-zoom in touch-action
+  // means "deliver pinch events" not "let the browser zoom."
+  //
+  // Fallback: VisualViewport API detects if the browser zoomed despite our
+  // prevention (Chrome Android sometimes ignores viewport meta restrictions).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -396,11 +401,8 @@ export function PDFViewer() {
     const getDist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
-    const isInsideViewer = (e: TouchEvent) =>
-      container.contains(e.target as Node);
-
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2 && isInsideViewer(e)) {
+      if (e.touches.length >= 2) {
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
@@ -408,15 +410,13 @@ export function PDFViewer() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      // Detect pinch start mid-gesture (finger added during scroll)
-      if (!pinchActive && e.touches.length >= 2 && isInsideViewer(e)) {
+      if (!pinchActive && e.touches.length >= 2) {
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
       }
       if (!pinchActive || e.touches.length < 2 || pinchDist === 0) return;
       e.preventDefault();
-      e.stopPropagation();
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
       const tab = activeTabRef.current;
@@ -434,25 +434,46 @@ export function PDFViewer() {
 
     const onTouchCancel = () => { pinchActive = false; pinchDist = 0; };
 
-    // Prevent Safari gesturestart/gesturechange from triggering browser zoom
-    const preventGesture = (e: Event) => {
-      if (container.contains(e.target as Node)) e.preventDefault();
+    // Safari gesture events
+    const preventGesture = (e: Event) => e.preventDefault();
+
+    container.addEventListener('touchstart',    onTouchStart,   { passive: true });
+    container.addEventListener('touchmove',     onTouchMove,    { passive: false });
+    container.addEventListener('touchend',      onTouchEnd,     { passive: true });
+    container.addEventListener('touchcancel',   onTouchCancel,  { passive: true });
+    container.addEventListener('gesturestart',  preventGesture as EventListener);
+    container.addEventListener('gesturechange', preventGesture as EventListener);
+
+    // ── VisualViewport fallback ─────────────────────────────────────────
+    // If the browser handles pinch zoom despite our touch prevention
+    // (Chrome Android ignores viewport meta), detect it via VisualViewport
+    // and mirror the scale change into our app zoom.
+    const vv = window.visualViewport;
+    let lastVVScale = vv?.scale ?? 1;
+
+    const onVVResize = () => {
+      if (!vv || pinchActive) return;
+      const scale = vv.scale;
+      if (Math.abs(scale - lastVVScale) > 0.01 && scale !== 1) {
+        const tab = activeTabRef.current;
+        if (tab) {
+          const newZoom = clamp(Math.round(tab.zoom * (scale / lastVVScale) * 100) / 100, 0.25, 4);
+          if (newZoom !== tab.zoom) updateTab(tab.id, { zoom: newZoom });
+        }
+      }
+      lastVVScale = scale;
     };
 
-    // Capture phase on document — fires BEFORE any element's touch-action
-    document.addEventListener('touchstart',    onTouchStart,   { capture: true, passive: true });
-    document.addEventListener('touchmove',     onTouchMove,    { capture: true, passive: false });
-    document.addEventListener('touchend',      onTouchEnd,     { capture: true, passive: true });
-    document.addEventListener('touchcancel',   onTouchCancel,  { capture: true, passive: true });
-    document.addEventListener('gesturestart',  preventGesture as EventListener, { capture: true });
-    document.addEventListener('gesturechange', preventGesture as EventListener, { capture: true });
+    vv?.addEventListener('resize', onVVResize);
+
     return () => {
-      document.removeEventListener('touchstart',    onTouchStart,   { capture: true });
-      document.removeEventListener('touchmove',     onTouchMove,    { capture: true });
-      document.removeEventListener('touchend',      onTouchEnd,     { capture: true });
-      document.removeEventListener('touchcancel',   onTouchCancel,  { capture: true });
-      document.removeEventListener('gesturestart',  preventGesture as EventListener, { capture: true });
-      document.removeEventListener('gesturechange', preventGesture as EventListener, { capture: true });
+      container.removeEventListener('touchstart',    onTouchStart);
+      container.removeEventListener('touchmove',     onTouchMove);
+      container.removeEventListener('touchend',      onTouchEnd);
+      container.removeEventListener('touchcancel',   onTouchCancel);
+      container.removeEventListener('gesturestart',  preventGesture as EventListener);
+      container.removeEventListener('gesturechange', preventGesture as EventListener);
+      vv?.removeEventListener('resize', onVVResize);
     };
   }, [updateTab]);
 
@@ -482,7 +503,7 @@ export function PDFViewer() {
       <div
         ref={containerRef}
         data-pdf-viewer
-        style={{ touchAction: 'pan-x pan-y' }}
+        style={{ touchAction: 'pan-y pinch-zoom' }}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',

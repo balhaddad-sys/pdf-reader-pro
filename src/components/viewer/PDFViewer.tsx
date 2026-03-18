@@ -463,7 +463,7 @@ export function PDFViewer() {
       <div
         ref={containerRef}
         data-pdf-viewer
-        style={{ touchAction: 'pan-y' }}
+        style={{ touchAction: 'manipulation' }}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',

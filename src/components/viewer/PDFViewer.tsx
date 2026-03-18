@@ -220,10 +220,13 @@ export function PDFViewer() {
     [numPages, naturalDimensions, displayZoom, gap, padding],
   );
 
-  // ── Page-aware scroll preservation on zoom ─────────────────────────────────
-  // When zoom changes, find which page the viewport center is on and where
-  // within that page, then compute the new scroll position from the new layout.
-  // This avoids cumulative gap/padding error that a simple ratio would have.
+  // ── Scroll preservation on zoom ─────────────────────────────────────────────
+  // When zoom changes, keep the anchor point (pinch center or viewport center)
+  // stationary on screen. Uses page-aware Y positioning to avoid gap error.
+  //
+  // pinchAnchorRef: set by the pinch handler to the midpoint between fingers
+  // relative to the container's viewport. null = use viewport center.
+  const pinchAnchorRef = useRef<{ x: number; y: number } | null>(null);
   const prevZoomRef = useRef(displayZoom);
   const prevLayoutRef = useRef(layout);
   const isZoomingRef = useRef(false);
@@ -245,20 +248,23 @@ export function PDFViewer() {
 
     const vh = container.clientHeight;
     const vw = container.clientWidth;
+    const rect = container.getBoundingClientRect();
 
-    // Find what page the viewport center was on in the OLD layout
-    const oldCenterY = container.scrollTop + vh / 2;
-    const { pageIndex, fraction } = findPageAtY(oldLayout.offsets, oldLayout.heights, oldCenterY);
+    // Anchor point: pinch center (if pinching) or viewport center
+    const anchor = pinchAnchorRef.current;
+    const anchorX = anchor ? anchor.x - rect.left : vw / 2;
+    const anchorY = anchor ? anchor.y - rect.top : vh / 2;
 
-    // Compute new center Y from the NEW layout
-    const newCenterY = layout.offsets[pageIndex] + fraction * layout.heights[pageIndex];
-    container.scrollTop = Math.max(0, newCenterY - vh / 2);
+    // ── Y: page-aware positioning ─────────────────────────────────────
+    const oldAnchorAbsY = container.scrollTop + anchorY;
+    const { pageIndex, fraction } = findPageAtY(oldLayout.offsets, oldLayout.heights, oldAnchorAbsY);
+    const newAnchorAbsY = layout.offsets[pageIndex] + fraction * layout.heights[pageIndex];
+    container.scrollTop = Math.max(0, newAnchorAbsY - anchorY);
 
-    // Horizontal: simple ratio (no gap accumulation issue)
-    if (container.scrollLeft > 0) {
-      const oldCenterX = container.scrollLeft + vw / 2;
-      container.scrollLeft = Math.max(0, oldCenterX * (displayZoom / oldZoom) - vw / 2);
-    }
+    // ── X: scale around anchor point ──────────────────────────────────
+    const oldAnchorAbsX = container.scrollLeft + anchorX;
+    const ratio = displayZoom / oldZoom;
+    container.scrollLeft = Math.max(0, oldAnchorAbsX * ratio - anchorX);
 
     requestAnimationFrame(() => { isZoomingRef.current = false; });
   }, [displayZoom, layout]);
@@ -401,22 +407,29 @@ export function PDFViewer() {
     const getDist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
+    const getMid = (t: TouchList) => ({
+      x: (t[0].clientX + t[1].clientX) / 2,
+      y: (t[0].clientY + t[1].clientY) / 2,
+    });
+
+    const startPinch = (e: TouchEvent) => {
+      pinchActive = true;
+      pinchDist   = getDist(e.touches);
+      pinchZoom   = activeTabRef.current?.zoom ?? 1;
+      // Store pinch midpoint so scroll preservation zooms around it
+      pinchAnchorRef.current = getMid(e.touches);
+    };
+
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2) {
-        pinchActive = true;
-        pinchDist   = getDist(e.touches);
-        pinchZoom   = activeTabRef.current?.zoom ?? 1;
-      }
+      if (e.touches.length >= 2) startPinch(e);
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!pinchActive && e.touches.length >= 2) {
-        pinchActive = true;
-        pinchDist   = getDist(e.touches);
-        pinchZoom   = activeTabRef.current?.zoom ?? 1;
-      }
+      if (!pinchActive && e.touches.length >= 2) startPinch(e);
       if (!pinchActive || e.touches.length < 2 || pinchDist === 0) return;
       e.preventDefault();
+      // Update anchor to current finger midpoint (fingers move during pinch)
+      pinchAnchorRef.current = getMid(e.touches);
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
       const tab = activeTabRef.current;
@@ -429,10 +442,16 @@ export function PDFViewer() {
       if (pinchActive && e.touches.length < 2) {
         pinchActive = false;
         pinchDist   = 0;
+        // Clear anchor after a frame so the final scroll preservation uses it
+        requestAnimationFrame(() => { pinchAnchorRef.current = null; });
       }
     };
 
-    const onTouchCancel = () => { pinchActive = false; pinchDist = 0; };
+    const onTouchCancel = () => {
+      pinchActive = false;
+      pinchDist = 0;
+      pinchAnchorRef.current = null;
+    };
 
     // Safari gesture events
     const preventGesture = (e: Event) => e.preventDefault();

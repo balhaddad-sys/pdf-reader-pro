@@ -388,14 +388,16 @@ export function PDFViewer() {
   }, [updateTab]);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
-  // Strategy: touch-action "pan-y pinch-zoom" tells the browser to allow
-  // native vertical scroll AND deliver pinch gesture touch events to JS.
-  // We preventDefault on touchmove during a pinch to stop the browser from
-  // actually zooming the page. This works because pinch-zoom in touch-action
-  // means "deliver pinch events" not "let the browser zoom."
+  // Two-layer approach:
   //
-  // Fallback: VisualViewport API detects if the browser zoomed despite our
-  // prevention (Chrome Android sometimes ignores viewport meta restrictions).
+  // Layer 1 (primary): Touch events on the container. touch-action: pan-y
+  // means the browser handles vertical scroll but NOT pinch-zoom. Touch
+  // events fire for pinch gestures and we handle zoom in JS.
+  //
+  // Layer 2 (fallback): VisualViewport API. If the browser still zooms
+  // (Chrome Android ignores viewport meta), we detect it, mirror the scale
+  // into our app zoom, and the viewport meta prevents the UI from staying
+  // zoomed. The toolbars stay fixed because only our PDF content zooms.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -416,7 +418,6 @@ export function PDFViewer() {
       pinchActive = true;
       pinchDist   = getDist(e.touches);
       pinchZoom   = activeTabRef.current?.zoom ?? 1;
-      // Store pinch midpoint so scroll preservation zooms around it
       pinchAnchorRef.current = getMid(e.touches);
     };
 
@@ -428,7 +429,6 @@ export function PDFViewer() {
       if (!pinchActive && e.touches.length >= 2) startPinch(e);
       if (!pinchActive || e.touches.length < 2 || pinchDist === 0) return;
       e.preventDefault();
-      // Update anchor to current finger midpoint (fingers move during pinch)
       pinchAnchorRef.current = getMid(e.touches);
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
@@ -442,7 +442,6 @@ export function PDFViewer() {
       if (pinchActive && e.touches.length < 2) {
         pinchActive = false;
         pinchDist   = 0;
-        // Clear anchor after a frame so the final scroll preservation uses it
         requestAnimationFrame(() => { pinchAnchorRef.current = null; });
       }
     };
@@ -464,23 +463,32 @@ export function PDFViewer() {
     container.addEventListener('gesturechange', preventGesture as EventListener);
 
     // ── VisualViewport fallback ─────────────────────────────────────────
-    // If the browser handles pinch zoom despite our touch prevention
-    // (Chrome Android ignores viewport meta), detect it via VisualViewport
-    // and mirror the scale change into our app zoom.
+    // Chrome Android may still zoom the visual viewport despite our
+    // touch-action and viewport meta. Detect it, apply to our app zoom,
+    // then let the viewport meta snap the browser back to scale=1.
     const vv = window.visualViewport;
-    let lastVVScale = vv?.scale ?? 1;
+    let baseAppZoom = activeTabRef.current?.zoom ?? 1;
+    let vvHandling = false;
 
     const onVVResize = () => {
-      if (!vv || pinchActive) return;
-      const scale = vv.scale;
-      if (Math.abs(scale - lastVVScale) > 0.01 && scale !== 1) {
+      if (!vv) return;
+      const browserScale = vv.scale;
+
+      // Browser zoomed — mirror into app zoom
+      if (Math.abs(browserScale - 1) > 0.02) {
+        if (!vvHandling) {
+          vvHandling = true;
+          baseAppZoom = activeTabRef.current?.zoom ?? 1;
+        }
         const tab = activeTabRef.current;
         if (tab) {
-          const newZoom = clamp(Math.round(tab.zoom * (scale / lastVVScale) * 100) / 100, 0.25, 4);
+          const newZoom = clamp(Math.round(baseAppZoom * browserScale * 100) / 100, 0.25, 4);
           if (newZoom !== tab.zoom) updateTab(tab.id, { zoom: newZoom });
         }
+      } else if (vvHandling) {
+        // Browser snapped back to scale=1, we're done
+        vvHandling = false;
       }
-      lastVVScale = scale;
     };
 
     vv?.addEventListener('resize', onVVResize);
@@ -522,7 +530,7 @@ export function PDFViewer() {
       <div
         ref={containerRef}
         data-pdf-viewer
-        style={{ touchAction: 'pan-y pinch-zoom' }}
+        style={{ touchAction: 'pan-y' }}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',

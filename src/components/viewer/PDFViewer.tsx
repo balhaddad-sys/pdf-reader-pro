@@ -390,6 +390,7 @@ export function PDFViewer() {
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
+        e.preventDefault();          // stop browser pinch-zoom
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
@@ -412,15 +413,22 @@ export function PDFViewer() {
     const onTouchEnd = () => { pinchActive = false; };
     const onTouchCancel = () => { pinchActive = false; };
 
-    container.addEventListener('touchstart',  onTouchStart,  { passive: true });
-    container.addEventListener('touchmove',   onTouchMove,   { passive: false });
-    container.addEventListener('touchend',    onTouchEnd,    { passive: true });
-    container.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    // Prevent Safari gesturestart/gesturechange from triggering browser zoom
+    const preventGesture = (e: Event) => e.preventDefault();
+
+    container.addEventListener('touchstart',    onTouchStart,   { passive: false });
+    container.addEventListener('touchmove',     onTouchMove,    { passive: false });
+    container.addEventListener('touchend',      onTouchEnd,     { passive: true });
+    container.addEventListener('touchcancel',   onTouchCancel,  { passive: true });
+    container.addEventListener('gesturestart',  preventGesture as EventListener);
+    container.addEventListener('gesturechange', preventGesture as EventListener);
     return () => {
-      container.removeEventListener('touchstart',  onTouchStart);
-      container.removeEventListener('touchmove',   onTouchMove);
-      container.removeEventListener('touchend',    onTouchEnd);
-      container.removeEventListener('touchcancel', onTouchCancel);
+      container.removeEventListener('touchstart',    onTouchStart);
+      container.removeEventListener('touchmove',     onTouchMove);
+      container.removeEventListener('touchend',      onTouchEnd);
+      container.removeEventListener('touchcancel',   onTouchCancel);
+      container.removeEventListener('gesturestart',  preventGesture as EventListener);
+      container.removeEventListener('gesturechange', preventGesture as EventListener);
     };
   }, [updateTab]);
 
@@ -450,6 +458,7 @@ export function PDFViewer() {
       <div
         ref={containerRef}
         data-pdf-viewer
+        style={{ touchAction: 'pan-y' }}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',

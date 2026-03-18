@@ -53,7 +53,7 @@ function notify() { listeners.forEach(fn => fn()); }
 // ── Tesseract worker pool ────────────────────────────────────────────────────
 
 const POOL_SIZE = 4;
-let pool: Worker[] = [];
+let _pool: Worker[] = [];
 let poolReady: Promise<Worker[]> | null = null;
 
 function getPool(): Promise<Worker[]> {
@@ -61,7 +61,7 @@ function getPool(): Promise<Worker[]> {
     poolReady = Promise.all(
       Array.from({ length: POOL_SIZE }, () => createWorker('ara+eng'))
     );
-    poolReady.then(workers => { pool = workers; });
+    poolReady.then(workers => { _pool = workers; });
   }
   return poolReady;
 }

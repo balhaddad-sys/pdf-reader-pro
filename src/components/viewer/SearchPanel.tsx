@@ -17,6 +17,7 @@ function normalizeForSearch(text: string): string {
 }
 
 function cleanSnippet(raw: string, query: string): string {
+  // eslint-disable-next-line no-control-regex
   let s = raw.replace(/[\x00-\x1f]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   if (s.length > 80) {
     const qNorm = normalizeForSearch(query);
@@ -175,7 +176,7 @@ export function SearchPanel() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { clearSearch(); setSearchOpen(false); }
       if (e.key === 'Enter' && matches.length > 0) {
-        e.shiftKey ? goToPrev() : goToNext();
+        if (e.shiftKey) goToPrev(); else goToNext();
       }
     };
     window.addEventListener('keydown', handleKeyDown);

@@ -24,8 +24,6 @@ const PAGE_PADDING_FOCUS = isMobile ? 4 : 8;
 const OVERSCAN = 4;
 const DEFAULT_W = 595;
 const DEFAULT_H = 842;
-/** How long after the last zoom change before we re-render at full res */
-const RENDER_SETTLE_MS = 500;
 
 // ─── Layout helpers ──────────────────────────────────────────────────────────
 
@@ -39,6 +37,7 @@ interface PageLayout {
 function computeLayout(
   numPages: number,
   dims: Map<number, { width: number; height: number }>,
+  zoom: number,
   gap: number,
   padding: number,
 ): PageLayout {
@@ -48,10 +47,12 @@ function computeLayout(
   let y = padding;
   for (let i = 1; i <= numPages; i++) {
     const d = dims.get(i);
+    const w = d ? d.width * zoom : DEFAULT_W * zoom;
+    const h = d ? d.height * zoom : DEFAULT_H * zoom;
     offsets.push(y);
-    heights.push(d ? d.height : DEFAULT_H);
-    widths.push(d ? d.width : DEFAULT_W);
-    y += (d ? d.height : DEFAULT_H) + gap;
+    heights.push(h);
+    widths.push(w);
+    y += h + gap;
   }
   return { offsets, heights, widths, totalHeight: y - gap + padding };
 }
@@ -65,6 +66,23 @@ function findFirstVisible(offsets: number[], heights: number[], scrollTop: numbe
     else hi = mid;
   }
   return lo;
+}
+
+/** Find page index + fraction for a given scroll Y position */
+function findPageAtY(
+  offsets: number[],
+  heights: number[],
+  y: number,
+): { pageIndex: number; fraction: number } {
+  let idx = 0;
+  for (let i = 0; i < offsets.length; i++) {
+    if (offsets[i] <= y) idx = i;
+    else break;
+  }
+  const offset = offsets[idx];
+  const h = heights[idx];
+  const fraction = h > 0 ? Math.max(0, Math.min(1, (y - offset) / h)) : 0;
+  return { pageIndex: idx, fraction };
 }
 
 // ─── VirtualPage ─────────────────────────────────────────────────────────────
@@ -111,16 +129,21 @@ const VirtualPage = memo(function VirtualPage({
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN VIEWER
 //
-// Architecture: layout is ALWAYS computed at renderZoom. The visual difference
-// between displayZoom and renderZoom is applied as a single CSS transform on
-// the pages container. During zoom gestures, NOTHING re-renders — only the
-// CSS transform and scroll position change. When zoom settles, renderZoom
-// catches up and pages re-render at full quality via double-buffered canvases.
+// Architecture:
+// - Layout is computed at displayZoom (current zoom) so scroll positions
+//   are always correct and the scrollbar height matches the content.
+// - Pages are RENDERED at renderZoom (which lags behind displayZoom).
+//   Each page canvas is CSS-scaled to fill its displayZoom slot.
+// - During zoom gestures: layout recomputes (just math, no DOM), scroll
+//   position is preserved page-aware, but NO page re-renders happen
+//   because renderZoom doesn't change.
+// - After zoom settles (500ms): renderZoom catches up, pages re-render
+//   at full quality via double-buffered canvases. The canvas swap is
+//   atomic so there's no visible flash.
 // ═════════════════════════════════════════════════════════════════════════════
 
 export function PDFViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const pagesContainerRef = useRef<HTMLDivElement | null>(null);
   const rafId = useRef(0);
   const lastPageRef = useRef(0);
   const lastScrollTop = useRef(0);
@@ -171,85 +194,74 @@ export function PDFViewer() {
   }, [pdf, activeTab?.documentId]);
 
   // ── Render zoom (deferred) ────────────────────────────────────────────────
-  // Layout is computed at renderZoom. Pages are rendered at renderZoom.
-  // The CSS transform scale(displayZoom/renderZoom) bridges the visual gap.
+  // renderZoom only changes after zoom gestures settle. PageRenderers only
+  // re-render when renderZoom changes, so active pinching never triggers renders.
   const [renderZoom, setRenderZoom] = useState(displayZoom);
   const renderZoomTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     clearTimeout(renderZoomTimer.current);
     if (renderZoom === displayZoom) return;
-    renderZoomTimer.current = setTimeout(() => setRenderZoom(displayZoom), RENDER_SETTLE_MS);
+    renderZoomTimer.current = setTimeout(() => setRenderZoom(displayZoom), 500);
     return () => clearTimeout(renderZoomTimer.current);
   }, [displayZoom, renderZoom]);
 
   // When document changes, sync renderZoom immediately
   useEffect(() => { setRenderZoom(displayZoom); }, [activeTab?.documentId]);
 
-  const scaleRatio = renderZoom > 0 ? displayZoom / renderZoom : 1;
-
-  // ── Layout at renderZoom ──────────────────────────────────────────────────
-  const renderDimensions = useMemo(() => {
-    const zoomed = new Map<number, { width: number; height: number }>();
-    naturalDimensions.forEach((dim, pageNum) => {
-      zoomed.set(pageNum, { width: dim.width * renderZoom, height: dim.height * renderZoom });
-    });
-    return zoomed;
-  }, [naturalDimensions, renderZoom]);
-
+  // ── Layout at displayZoom ──────────────────────────────────────────────────
+  // Layout is always at displayZoom so scroll positions and scrollbar are correct.
   const gap = focusMode ? PAGE_GAP_FOCUS : PAGE_GAP;
   const padding = focusMode ? PAGE_PADDING_FOCUS : PAGE_PADDING;
   const numPages = pdf?.numPages ?? 0;
 
   const layout = useMemo(
-    () => computeLayout(numPages, renderDimensions, gap, padding),
-    [numPages, renderDimensions, gap, padding],
+    () => computeLayout(numPages, naturalDimensions, displayZoom, gap, padding),
+    [numPages, naturalDimensions, displayZoom, gap, padding],
   );
 
-  // The visual height of the content (layout height × scale ratio)
-  const visualHeight = layout.totalHeight * scaleRatio
-    || (numPages * (DEFAULT_H + PAGE_GAP) + PAGE_PADDING * 2);
-
-  // ── Apply CSS transform to pages container ────────────────────────────────
-  // This runs on every displayZoom change — but it's just setting a CSS
-  // property, zero React rendering.
-  useEffect(() => {
-    const pagesEl = pagesContainerRef.current;
-    if (!pagesEl) return;
-    if (Math.abs(scaleRatio - 1) < 0.001) {
-      pagesEl.style.transform = '';
-      pagesEl.style.transformOrigin = '';
-    } else {
-      pagesEl.style.transform = `scale(${scaleRatio})`;
-      pagesEl.style.transformOrigin = 'top center';
-    }
-  }, [scaleRatio]);
-
-  // ── Scroll position preservation on zoom ──────────────────────────────────
-  // When displayZoom changes, adjust scroll to keep the same content visible.
-  const prevDisplayZoom = useRef(displayZoom);
+  // ── Page-aware scroll preservation on zoom ─────────────────────────────────
+  // When zoom changes, find which page the viewport center is on and where
+  // within that page, then compute the new scroll position from the new layout.
+  // This avoids cumulative gap/padding error that a simple ratio would have.
+  const prevZoomRef = useRef(displayZoom);
+  const prevLayoutRef = useRef(layout);
   const isZoomingRef = useRef(false);
 
   useLayoutEffect(() => {
-    const oldZoom = prevDisplayZoom.current;
+    const oldZoom = prevZoomRef.current;
+    const oldLayout = prevLayoutRef.current;
+    prevZoomRef.current = displayZoom;
+    prevLayoutRef.current = layout;
+
     if (oldZoom === displayZoom) return;
-    prevDisplayZoom.current = displayZoom;
     isZoomingRef.current = true;
 
     const container = containerRef.current;
-    if (container) {
-      const vw = container.clientWidth;
-      const vh = container.clientHeight;
-      // Scale scroll positions proportionally
-      const ratio = displayZoom / oldZoom;
-      const centerY = container.scrollTop + vh / 2;
-      const centerX = container.scrollLeft + vw / 2;
-      container.scrollTop  = Math.max(0, centerY * ratio - vh / 2);
-      container.scrollLeft = Math.max(0, centerX * ratio - vw / 2);
+    if (!container || oldLayout.offsets.length === 0 || layout.offsets.length === 0) {
+      requestAnimationFrame(() => { isZoomingRef.current = false; });
+      return;
+    }
+
+    const vh = container.clientHeight;
+    const vw = container.clientWidth;
+
+    // Find what page the viewport center was on in the OLD layout
+    const oldCenterY = container.scrollTop + vh / 2;
+    const { pageIndex, fraction } = findPageAtY(oldLayout.offsets, oldLayout.heights, oldCenterY);
+
+    // Compute new center Y from the NEW layout
+    const newCenterY = layout.offsets[pageIndex] + fraction * layout.heights[pageIndex];
+    container.scrollTop = Math.max(0, newCenterY - vh / 2);
+
+    // Horizontal: simple ratio (no gap accumulation issue)
+    if (container.scrollLeft > 0) {
+      const oldCenterX = container.scrollLeft + vw / 2;
+      container.scrollLeft = Math.max(0, oldCenterX * (displayZoom / oldZoom) - vw / 2);
     }
 
     requestAnimationFrame(() => { isZoomingRef.current = false; });
-  }, [displayZoom]);
+  }, [displayZoom, layout]);
 
   // ── Visible window ────────────────────────────────────────────────────────
   const [visibleRange, setVisibleRange] = useState<[number, number]>([0, Math.min(5, Math.max(numPages - 1, 0))]);
@@ -261,10 +273,8 @@ export function PDFViewer() {
       return;
     }
 
-    // The scroll position is in visual space. Convert to layout space.
-    const s = scaleRatio || 1;
-    const scrollTop = container.scrollTop / s;
-    const viewH = container.clientHeight / s;
+    const scrollTop = container.scrollTop;
+    const viewH = container.clientHeight;
 
     const first = findFirstVisible(layout.offsets, layout.heights, scrollTop);
     let last = first;
@@ -286,7 +296,7 @@ export function PDFViewer() {
       const tab = activeTabRef.current;
       if (tab && currentPage !== tab.page) updateTab(tab.id, { page: currentPage });
     }
-  }, [layout, updateTab, numPages, scaleRatio]);
+  }, [layout, updateTab, numPages]);
 
   // ── Scroll handler ────────────────────────────────────────────────────────
   const FAST_THRESHOLD = 3000;
@@ -326,10 +336,8 @@ export function PDFViewer() {
     if (idx < 0 || idx >= layout.offsets.length) return;
     if (activeTab.page === lastPageRef.current) return;
     if (isZoomingRef.current) return;
-    // Convert layout-space offset to visual-space
-    const s = scaleRatio || 1;
-    container.scrollTo({ top: layout.offsets[idx] * s - 20, behavior: 'smooth' });
-  }, [activeTab?.page, layout.offsets, scaleRatio]);
+    container.scrollTo({ top: layout.offsets[idx] - 20, behavior: 'smooth' });
+  }, [activeTab?.page, layout.offsets]);
 
   // ── Header zoom requests ──────────────────────────────────────────────────
   useEffect(() => {
@@ -374,9 +382,6 @@ export function PDFViewer() {
   }, [updateTab]);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
-  // During pinch: update displayZoom directly (CSS transform handles visuals).
-  // No CSS transform on the pages container during gesture — the displayZoom
-  // change updates scaleRatio which is applied via useEffect above.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -466,34 +471,26 @@ export function PDFViewer() {
         )}
         onScroll={handleScroll}
       >
-        {/* Height wrapper — sets scrollable area to visual height */}
-        <div style={{ height: `${visualHeight}px`, position: 'relative' }}>
-          {/* Pages container — layout at renderZoom, CSS-scaled to displayZoom */}
-          <div
-            ref={pagesContainerRef}
-            className="absolute top-0 left-0 w-full"
-            style={{ height: `${layout.totalHeight || visualHeight}px` }}
-          >
-            {Array.from({ length: Math.max(0, endIdx - startIdx + 1) }, (_, i) => {
-              const idx = startIdx + i;
-              if (idx < 0 || idx >= numPages) return null;
-              const pageNum = idx + 1;
-              const hasLayout = idx < layout.offsets.length;
-              return (
-                <VirtualPage
-                  key={pageNum}
-                  pdf={pdf}
-                  pageNumber={pageNum}
-                  renderZoom={renderZoom}
-                  isDrawingMode={isDrawingMode}
-                  width={hasLayout ? layout.widths[idx] : DEFAULT_W}
-                  height={hasLayout ? layout.heights[idx] : DEFAULT_H}
-                  top={hasLayout ? layout.offsets[idx] : PAGE_PADDING + idx * (DEFAULT_H + PAGE_GAP)}
-                  defer={fastScrolling}
-                />
-              );
-            })}
-          </div>
+        <div style={{ height: `${layout.totalHeight}px`, position: 'relative' }}>
+          {Array.from({ length: Math.max(0, endIdx - startIdx + 1) }, (_, i) => {
+            const idx = startIdx + i;
+            if (idx < 0 || idx >= numPages) return null;
+            const pageNum = idx + 1;
+            const hasLayout = idx < layout.offsets.length;
+            return (
+              <VirtualPage
+                key={pageNum}
+                pdf={pdf}
+                pageNumber={pageNum}
+                renderZoom={renderZoom}
+                isDrawingMode={isDrawingMode}
+                width={hasLayout ? layout.widths[idx] : DEFAULT_W * displayZoom}
+                height={hasLayout ? layout.heights[idx] : DEFAULT_H * displayZoom}
+                top={hasLayout ? layout.offsets[idx] : PAGE_PADDING + idx * (DEFAULT_H * displayZoom + PAGE_GAP)}
+                defer={fastScrolling}
+              />
+            );
+          })}
         </div>
       </div>
 

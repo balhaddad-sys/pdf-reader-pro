@@ -239,7 +239,7 @@ export const PageRenderer = memo(function PageRenderer({ pdf, pageNumber, zoom }
           <div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spinner" />
         </div>
       )}
-      <canvas ref={canvasRef} className="block" />
+      <canvas ref={canvasRef} className="block w-full h-full" />
       <div ref={annotLayerRef} className="absolute inset-0 overflow-hidden pointer-events-none" />
       <div
         ref={textLayerRef}

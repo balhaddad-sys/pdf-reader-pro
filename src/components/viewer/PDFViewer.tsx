@@ -382,11 +382,9 @@ export function PDFViewer() {
   }, [updateTab]);
 
   // ── Pinch-to-zoom ─────────────────────────────────────────────────────────
-  // Don't preventDefault on touchstart — it cancels touch tracking on some
-  // browsers and prevents subsequent touchmove events from firing.
-  // The viewport meta (maximum-scale=1, user-scalable=no) already blocks
-  // browser zoom. We only preventDefault on touchmove to stop the browser
-  // from panning/scrolling during an active pinch.
+  // Register on DOCUMENT in capture phase so no element's touch-action can
+  // intercept or cancel the events before we see them. We check if the
+  // touch originated inside our viewer container before acting.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -398,8 +396,11 @@ export function PDFViewer() {
     const getDist = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
+    const isInsideViewer = (e: TouchEvent) =>
+      container.contains(e.target as Node);
+
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2) {
+      if (e.touches.length >= 2 && isInsideViewer(e)) {
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
@@ -408,13 +409,14 @@ export function PDFViewer() {
 
     const onTouchMove = (e: TouchEvent) => {
       // Detect pinch start mid-gesture (finger added during scroll)
-      if (!pinchActive && e.touches.length >= 2) {
+      if (!pinchActive && e.touches.length >= 2 && isInsideViewer(e)) {
         pinchActive = true;
         pinchDist   = getDist(e.touches);
         pinchZoom   = activeTabRef.current?.zoom ?? 1;
       }
       if (!pinchActive || e.touches.length < 2 || pinchDist === 0) return;
       e.preventDefault();
+      e.stopPropagation();
       const scale = getDist(e.touches) / pinchDist;
       const newZoom = clamp(Math.round(pinchZoom * scale * 100) / 100, 0.25, 4);
       const tab = activeTabRef.current;
@@ -424,8 +426,7 @@ export function PDFViewer() {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      // Only deactivate when fewer than 2 fingers remain
-      if (e.touches.length < 2) {
+      if (pinchActive && e.touches.length < 2) {
         pinchActive = false;
         pinchDist   = 0;
       }
@@ -434,21 +435,24 @@ export function PDFViewer() {
     const onTouchCancel = () => { pinchActive = false; pinchDist = 0; };
 
     // Prevent Safari gesturestart/gesturechange from triggering browser zoom
-    const preventGesture = (e: Event) => e.preventDefault();
+    const preventGesture = (e: Event) => {
+      if (container.contains(e.target as Node)) e.preventDefault();
+    };
 
-    container.addEventListener('touchstart',    onTouchStart,   { passive: true });
-    container.addEventListener('touchmove',     onTouchMove,    { passive: false });
-    container.addEventListener('touchend',      onTouchEnd,     { passive: true });
-    container.addEventListener('touchcancel',   onTouchCancel,  { passive: true });
-    container.addEventListener('gesturestart',  preventGesture as EventListener);
-    container.addEventListener('gesturechange', preventGesture as EventListener);
+    // Capture phase on document — fires BEFORE any element's touch-action
+    document.addEventListener('touchstart',    onTouchStart,   { capture: true, passive: true });
+    document.addEventListener('touchmove',     onTouchMove,    { capture: true, passive: false });
+    document.addEventListener('touchend',      onTouchEnd,     { capture: true, passive: true });
+    document.addEventListener('touchcancel',   onTouchCancel,  { capture: true, passive: true });
+    document.addEventListener('gesturestart',  preventGesture as EventListener, { capture: true });
+    document.addEventListener('gesturechange', preventGesture as EventListener, { capture: true });
     return () => {
-      container.removeEventListener('touchstart',    onTouchStart);
-      container.removeEventListener('touchmove',     onTouchMove);
-      container.removeEventListener('touchend',      onTouchEnd);
-      container.removeEventListener('touchcancel',   onTouchCancel);
-      container.removeEventListener('gesturestart',  preventGesture as EventListener);
-      container.removeEventListener('gesturechange', preventGesture as EventListener);
+      document.removeEventListener('touchstart',    onTouchStart,   { capture: true });
+      document.removeEventListener('touchmove',     onTouchMove,    { capture: true });
+      document.removeEventListener('touchend',      onTouchEnd,     { capture: true });
+      document.removeEventListener('touchcancel',   onTouchCancel,  { capture: true });
+      document.removeEventListener('gesturestart',  preventGesture as EventListener, { capture: true });
+      document.removeEventListener('gesturechange', preventGesture as EventListener, { capture: true });
     };
   }, [updateTab]);
 
@@ -478,7 +482,7 @@ export function PDFViewer() {
       <div
         ref={containerRef}
         data-pdf-viewer
-        style={{ touchAction: 'manipulation' }}
+        style={{ touchAction: 'pan-x pan-y' }}
         className={cn(
           'flex-1 min-h-0 overflow-y-auto overflow-x-auto',
           'bg-surface-0',
